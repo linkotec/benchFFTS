@@ -1,13 +1,3 @@
-/**************************************************************************/
-/* NOTE to users: this is the FFTW self-test and benchmark program.
-   It is probably NOT a good place to learn FFTW usage, since it has a
-   lot of added complexity in order to exercise and test the full API,
-   etcetera.  We suggest reading the manual. 
-
-   (Some of the self-test code is split off into fftw-bench.c and
-   hook.c.) */
-/**************************************************************************/
-
 #include "libbench2/bench-user.h"
 #include "ffts/include/ffts.h"
 
@@ -530,7 +520,8 @@ int can_do(bench_problem *p)
 {
 	bench_tensor *sz;
 
-	if (p->kind != PROBLEM_COMPLEX) {
+	if (p->kind != PROBLEM_COMPLEX &&
+		p->kind != PROBLEM_REAL) {
 		return 0;
 	}
 
@@ -584,14 +575,28 @@ void main_init(int *argc, char ***argv)
 
 void setup(bench_problem *p)
 {
+	ffts_plan_t *plan;
 	double tim;
 
 	timer_start(USER_TIMER);
-	p->userinfo = ffts_init_1d(p->sz->dims->n, p->sign);
+
+	switch(p->kind)
+	{
+	case PROBLEM_COMPLEX:
+		plan = ffts_init_1d(p->sz->dims->n, p->sign);
+		break;
+	case PROBLEM_REAL:
+		plan = ffts_init_1d_real(p->sz->dims->n, p->sign);
+		break;
+	default:
+		BENCH_ASSERT(0);
+	}
+
 	tim = timer_stop(USER_TIMER);
 	if (verbose > 1) {
 		printf("planner time: %g s\n", tim);
 	}
 
+	p->userinfo = plan;
 	BENCH_ASSERT(p->userinfo);
 }
