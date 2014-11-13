@@ -23,6 +23,7 @@ option(BENCHFFT_SINGLE
 include(CheckIncludeFile)
 include(CheckFunctionExists)
 include(CheckLibraryExists)
+include(CheckSymbolExists)
 
 if(MSVC)
   # use our aligned malloc/free for 32 bit Windows
@@ -33,42 +34,36 @@ if(MSVC)
   add_definitions(-D_USE_MATH_DEFINES)
 else()
   # some systems need libm for some of the math functions to work
-  check_library_exists(m pow "" HAVE_LIBM)
+  check_library_exists(m cos "" HAVE_LIBM)
   if(HAVE_LIBM)
     list(APPEND CMAKE_REQUIRED_LIBRARIES m)
     list(APPEND LIBBENCH2_EXTRA_LIBRARIES m)
   endif(HAVE_LIBM)
 endif(MSVC)
 
-check_include_file(alloca.h HAVE_ALLOCA_H)
-if(HAVE_ALLOCA_H)
-  list(APPEND CMAKE_REQUIRED_INCLUDES alloca.h)
-endif(HAVE_ALLOCA_H)
-
 check_include_file(malloc.h HAVE_MALLOC_H)
 check_include_file(stdarg.h HAVE_STDARG_H)
 check_include_file(stddef.h HAVE_STDDEF_H)
 check_include_file(stdlib.h HAVE_STDLIB_H)
 check_include_file(string.h HAVE_STRING_H)
+
 check_include_file(sys/time.h HAVE_SYS_TIME_H)
-check_include_file(unistd.h HAVE_UNISTD_H)
-
-check_function_exists(srand48 HAVE_DECL_SRAND48)
-if(HAVE_DECL_SRAND48)
-  check_function_exists(drand48 HAVE_DECL_DRAND48)
-  if(HAVE_DECL_DRAND48)
-    set(HAVE_DRAND48 1)
-  endif(HAVE_DECL_DRAND48)
-endif(HAVE_DECL_SRAND48)
-
 if(HAVE_SYS_TIME_H)
   list(APPEND CMAKE_REQUIRED_INCLUDES sys/time.h)
 endif()
 
-check_function_exists(alloca HAVE_ALLOCA)
-check_function_exists(cosl HAVE_COSL)
-check_function_exists(gettimeofday HAVE_GETTIMEOFDAY)
-check_function_exists(memalign HAVE_MEMALIGN)
+check_include_file(unistd.h HAVE_UNISTD_H)
+
+check_symbol_exists(cosl           math.h   HAVE_DECL_COSL)
+check_symbol_exists(srand48        stdlib.h HAVE_DECL_SRAND48)
+check_symbol_exists(drand48        stdlib.h HAVE_DECL_DRAND48)
+check_symbol_exists(memalign       malloc.h HAVE_DECL_MEMALIGN)
+check_symbol_exists(posix_memalign stdlib.h HAVE_DECL_POSIX_MEMALIGN)
+
+check_function_exists(cosl           HAVE_COSL)
+check_function_exists(drand48        HAVE_DRAND48)
+check_function_exists(gettimeofday   HAVE_GETTIMEOFDAY)
+check_function_exists(memalign       HAVE_MEMALIGN)
 check_function_exists(posix_memalign HAVE_POSIX_MEMALIGN)
 
 if(BENCHFFT_QUAD AND NOT HAVE_LIBQUADMATH)
