@@ -8,22 +8,20 @@
    hook.c.) */
 /**************************************************************************/
 
+#include "libbench2/bench-user.h"
+#include "ffts/include/ffts.h"
+
 #include <math.h>
 #include <stdio.h>
 #include <string.h>
-#include "fftw-bench.h"
-
-static const char *mkversion(void) { return FFTW(version); }
-static const char *mkcc(void) { return FFTW(cc); }
-static const char *mkcodelet_optim(void) { return FFTW(codelet_optim); }
 
 BEGIN_BENCH_DOC
-BENCH_DOC("name", "fftw3")
-BENCH_DOCF("version", mkversion)
-BENCH_DOCF("cc", mkcc)
-BENCH_DOCF("codelet-optim", mkcodelet_optim)
+BENCH_DOC("name", "ffts")
+BENCH_DOC("version", "v0.8")
+BENCH_DOC("year", "2014")
 END_BENCH_DOC 
 
+#if 0
 static FFTW(iodim) *bench_tensor_to_fftw_iodim(bench_tensor *t)
 {
      FFTW(iodim) *d;
@@ -526,27 +524,74 @@ FFTW(plan) mkplan(bench_problem *p, unsigned flags)
 	 default: BENCH_ASSERT(0); return 0;
      }
 }
+#endif
 
-void main_init(int *argc, char ***argv)
+int can_do(bench_problem *p)
 {
-     UNUSED(argc);
-     UNUSED(argv);
+	bench_tensor *sz;
+
+	if (p->kind != PROBLEM_COMPLEX) {
+		return 0;
+	}
+
+	sz = p->sz;
+	if (sz->rnk != 1) {
+		return 0;
+	}
+
+	return 1;
 }
 
-void initial_cleanup(void)
+void cleanup(void)
 {
+	/* nothing to do */
+}
+
+void doit(int iter, bench_problem *p)
+{
+	ffts_plan_t *q = p->userinfo;
+	const void *in = p->in;
+	void *out = p->out;
+	int i;
+
+	for (i = 0; i < iter; ++i) {
+		ffts_execute(q, in, out);
+	}
+}
+
+void done(bench_problem *p)
+{
+	if (p->userinfo) {
+		ffts_free(p->userinfo);
+	}
 }
 
 void final_cleanup(void)
 {
+	/* nothing to do */
 }
 
-int import_wisdom(FILE *f)
+void initial_cleanup(void)
 {
-     return FFTW(import_wisdom_from_file)(f);
+	/* nothing to do */
 }
 
-void export_wisdom(FILE *f)
+void main_init(int *argc, char ***argv)
 {
-     FFTW(export_wisdom_to_file)(f);
+     (void*) (argc);
+     (void*) (argv);
+}
+
+void setup(bench_problem *p)
+{
+	double tim;
+
+	timer_start(USER_TIMER);
+	p->userinfo = ffts_init_1d(p->sz->dims->n, p->sign);
+	tim = timer_stop(USER_TIMER);
+	if (verbose > 1) {
+		printf("planner time: %g s\n", tim);
+	}
+
+	BENCH_ASSERT(p->userinfo);
 }
