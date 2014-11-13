@@ -18,14 +18,11 @@
 /* Define to compile in single precision. */
 #cmakedefine BENCHFFT_SINGLE 1
 
-/* Define to 1 if you have the declaration of `alloca', and to 0 if you don't. */
-#cmakedefine01 HAVE_ALLOCA
+/* Define to 1 if you have the `cosl' function. */
+#cmakedefine HAVE_COSL 1
 
-/* Define to 1 if you have the <alloca.h> header file. */
-#cmakedefine HAVE_ALLOCA_H 1
-
-/* Define to 1 if you have the `cosl' function, and to 0 if you don't. */
-#cmakedefine01 HAVE_COSL
+/* Define to 1 if you have the declaration of `cosl', and to 0 if you don't. */
+#cmakedefine01 HAVE_DECL_COSL
 
 /* Define to 1 if you have the declaration of `drand48', and to 0 if you don't. */
 #cmakedefine01 HAVE_DECL_DRAND48
@@ -57,8 +54,11 @@
 /* Define to 1 if you have the <malloc.h> header file. */
 #cmakedefine HAVE_MALLOC_H 1
 
-/* Define to 1 if you have the declaration of `memalign', and to 0 if you don't. */
-#cmakedefine01 HAVE_MEMALIGN
+/* Define to 1 if you have the declaration of `memalign'. */
+#cmakedefine HAVE_MEMALIGN 1
+
+/* Define to 1 if you have the declaration of `posix_memalign'. */
+#cmakedefine HAVE_POSIX_MEMALIGN 1
 
 /* Define to 1 if you have the `snprintf' function. */
 #cmakedefine HAVE_SNPRINTF 1
