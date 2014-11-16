@@ -40,24 +40,37 @@
 #include <assert.h>
 #include <string.h>
 
-void neon_x4(float *, size_t, float *);
-void neon_x8(float *, size_t, float *);
-void neon_x8_t(float *, size_t, float *);
-void leaf_ee_init();
-void leaf_ee();
-void leaf_oo();
-void leaf_eo();
-void leaf_oe();
-void leaf_end();
-void x_init();
-void x4();
-void x8_soft();
-void x8_soft_end();
+extern void leaf_ee_init();
+extern void leaf_ee();
+extern void leaf_oo();
+extern void leaf_eo();
+extern void leaf_oe();
+extern void leaf_end();
+extern void x_init();
+extern void x4();
+extern void x8_soft();
+extern void x8_soft_end();
 
-void sse_constants();
-void sse_constants_inv();
+#ifdef SSE_DEFINE_CONSTANTS
+static const FFTS_ALIGN(16) unsigned int sse_constants[20] = {
+	0x00000000, 0x80000000, 0x00000000, 0x80000000,
+	0x3f3504f3, 0x3f3504f3, 0x3f3504f3, 0x3f3504f3,
+	0xbf3504f3, 0x3f3504f3, 0xbf3504f3, 0x3f3504f3,
+	0x3f800000, 0x3f800000, 0x3f3504f3, 0x3f3504f3,
+	0x00000000, 0x00000000, 0xbf3504f3, 0x3f3504f3
+};
 
-//	typedef uint8_t insns_t;
+static const FFTS_ALIGN(16) unsigned int sse_constants_inv[20] = {
+	0x80000000, 0x00000000, 0x80000000, 0x00000000,
+    0x3f3504f3, 0x3f3504f3, 0x3f3504f3, 0x3f3504f3,
+    0x3f3504f3, 0xbf3504f3, 0x3f3504f3, 0xbf3504f3,
+    0x3f800000, 0x3f800000, 0x3f3504f3, 0x3f3504f3,
+    0x00000000, 0x00000000, 0x3f3504f3, 0xbf3504f3
+};
+#else
+extern void sse_constants();
+extern void sse_constants_inv();
+#endif
 
 extern const uint32_t sse_leaf_ee_offsets[8];
 extern const uint32_t sse_leaf_eo_offsets[8];
@@ -297,7 +310,10 @@ static FFTS_INLINE insns_t* generate_size4_base_case(insns_t **fp, int sign)
 	x64_sse_subps_reg_reg(ins, X64_XMM6, X64_XMM4);
 	x64_sse_addps_reg_reg(ins, X64_XMM5, X64_XMM4);
 	x64_sse_movaps_reg_membase(ins, X64_XMM8, X64_R8, 32);
+	
+	/* change sign */
 	x64_sse_xorps_reg_reg(ins, X64_XMM6, X64_XMM3);
+	
 	x64_sse_shufps_reg_reg_imm(ins, X64_XMM6, X64_XMM6, 0xB1);
 	x64_sse_movaps_reg_reg(ins, X64_XMM10, X64_XMM8);
 	x64_sse_movaps_reg_membase(ins, X64_XMM12, X64_R8, 112);
@@ -324,7 +340,10 @@ static FFTS_INLINE insns_t* generate_size4_base_case(insns_t **fp, int sign)
 	x64_sse_movaps_reg_reg(ins, X64_XMM15, X64_XMM0);
 	x64_sse_subps_reg_reg(ins, X64_XMM0, X64_XMM14);
 	x64_sse_addps_reg_reg(ins, X64_XMM15, X64_XMM14);
+	
+	/* change sign */
 	x64_sse_xorps_reg_reg(ins, X64_XMM0, X64_XMM3);
+	
 	x64_sse_movaps_reg_membase(ins, X64_XMM1, X64_R8, 16);
 	x64_sse_movaps_reg_membase(ins, X64_XMM2, X64_R8, 48);
 	x64_sse_movaps_reg_reg(ins, X64_XMM4, X64_XMM1);
@@ -418,7 +437,10 @@ static FFTS_INLINE void generate_leaf_ee(insns_t **fp, uint32_t *offsets)
 	x64_sse_movaps_reg_reg(ins, X64_XMM11, X64_XMM12);
 	x64_sse_subps_reg_reg(ins, X64_XMM12, X64_XMM10);
 	x64_sse_addps_reg_reg(ins, X64_XMM11, X64_XMM10);
+	
+	/* change sign */
 	x64_sse_xorps_reg_reg(ins, X64_XMM12, X64_XMM8);
+	
 	x64_sse_movaps_reg_memindex(ins, X64_XMM9,  X64_RDX, offsets[1], X64_RAX, 2);
 	x64_sse_movaps_reg_memindex(ins, X64_XMM10, X64_RDX, offsets[4], X64_RAX, 2);
 	x64_sse_addps_reg_reg(ins, X64_XMM6, X64_XMM9);
@@ -454,7 +476,10 @@ static FFTS_INLINE void generate_leaf_ee(insns_t **fp, uint32_t *offsets)
 	x64_sse_addps_reg_reg(ins, X64_XMM2, X64_XMM1);
 	x64_sse_subps_reg_reg(ins, X64_XMM5, X64_XMM1);
 	x64_sse_shufps_reg_reg_imm(ins, X64_XMM10, X64_XMM10, 0xB1);
+	
+	/* change sign */
 	x64_sse_xorps_reg_reg(ins, X64_XMM9, X64_XMM8);
+	
 	x64_sse_shufps_reg_reg_imm(ins, X64_XMM3, X64_XMM3, 0xB1);
 	x64_sse_movaps_reg_reg(ins, X64_XMM1, X64_XMM6);
 	x64_sse_mulps_reg_reg(ins, X64_XMM10, X64_XMM0);
@@ -471,7 +496,10 @@ static FFTS_INLINE void generate_leaf_ee(insns_t **fp, uint32_t *offsets)
 	x64_sse_addps_reg_reg(ins, X64_XMM6, X64_XMM9);
 	x64_sse_addps_reg_reg(ins, X64_XMM4, X64_XMM3);
 	x64_sse_subps_reg_reg(ins, X64_XMM13, X64_XMM3);
+
+	/* change sign */
 	x64_sse_xorps_reg_reg(ins, X64_XMM12, X64_XMM8);
+
 	x64_sse_movaps_reg_reg(ins, X64_XMM3, X64_XMM2);
 	x64_sse_shufps_reg_reg_imm(ins, X64_XMM12, X64_XMM12, 0xB1);
 	x64_sse_movaps_reg_reg(ins, X64_XMM9, X64_XMM6);
@@ -541,7 +569,10 @@ static FFTS_INLINE void generate_leaf_eo(insns_t **fp, uint32_t *offsets)
 	x64_sse_addps_reg_reg(ins, X64_XMM6, X64_XMM5);
 	x64_sse_movaps_reg_membase(ins, X64_XMM3, X64_RSI, 0);
 	x64_sse_movaps_reg_reg(ins, X64_XMM10, X64_XMM11);
+	
+	/* change sign */
 	x64_sse_xorps_reg_reg(ins, X64_XMM7, X64_XMM3);
+
 	x64_sse_movaps_reg_reg(ins, X64_XMM8, X64_XMM9);
 	x64_sse_shufps_reg_reg_imm(ins, X64_XMM7, X64_XMM7, 0xB1);
 	x64_sse_addps_reg_reg(ins, X64_XMM10, X64_XMM6);
@@ -570,7 +601,10 @@ static FFTS_INLINE void generate_leaf_eo(insns_t **fp, uint32_t *offsets)
 	x64_sse_movlhps_reg_reg(ins, X64_XMM2, X64_XMM8);
 	x64_sse_movaps_reg_reg(ins, X64_XMM8, X64_XMM5);
 	x64_sse_movlhps_reg_reg(ins, X64_XMM7, X64_XMM15);
+	
+	/* change sign */
 	x64_sse_xorps_reg_reg(ins, X64_XMM15, X64_XMM3);
+
 	x64_sse_movaps_reg_reg(ins, X64_XMM6, X64_XMM5);
 	x64_sse_subps_reg_reg(ins, X64_XMM5, X64_XMM14);
 	x64_sse_addps_reg_reg(ins, X64_XMM6, X64_XMM14);
@@ -600,7 +634,10 @@ static FFTS_INLINE void generate_leaf_eo(insns_t **fp, uint32_t *offsets)
 	x64_sse_shufps_reg_reg_imm(ins, X64_XMM6, X64_XMM14, 0xEE);
 	x64_sse_subps_reg_reg(ins, X64_XMM11, X64_XMM9);
 	x64_sse_addps_reg_reg(ins, X64_XMM10, X64_XMM9);
+	
+	/* change sign */
 	x64_sse_xorps_reg_reg(ins, X64_XMM11, X64_XMM3);
+	
 	x64_sse_movaps_reg_reg(ins, X64_XMM3, X64_XMM2);
 	x64_sse_shufps_reg_reg_imm(ins, X64_XMM11, X64_XMM11, 0xB1);
 	x64_sse_subps_reg_reg(ins, X64_XMM3, X64_XMM10);
@@ -608,8 +645,8 @@ static FFTS_INLINE void generate_leaf_eo(insns_t **fp, uint32_t *offsets)
 	x64_sse_addps_reg_reg(ins, X64_XMM12, X64_XMM11);
 	x64_sse_subps_reg_reg(ins, X64_XMM1, X64_XMM11);
 	x64_sse_shufps_reg_reg_imm(ins, X64_XMM5, X64_XMM4, 0xEE);
-	x64_sse_movaps_memindex_reg(ins, X64_R8,  48, X64_R11, 2, X64_XMM5);
-	x64_sse_movaps_memindex_reg(ins, X64_R8,  32, X64_R11, 2, X64_XMM6);
+	x64_sse_movaps_memindex_reg(ins, X64_R8, 48, X64_R11, 2, X64_XMM5);
+	x64_sse_movaps_memindex_reg(ins, X64_R8, 32, X64_R11, 2, X64_XMM6);
 	x64_sse_movaps_memindex_reg(ins, X64_R8,  0, X64_R10, 2, X64_XMM2);
 	x64_sse_movaps_memindex_reg(ins, X64_R8, 16, X64_R10, 2, X64_XMM1);
 	x64_sse_movaps_memindex_reg(ins, X64_R8, 32, X64_R10, 2, X64_XMM3);
@@ -660,7 +697,10 @@ static FFTS_INLINE void generate_leaf_oe(insns_t **fp, uint32_t *offsets)
 	x64_sse_movaps_reg_reg(ins, X64_XMM4, X64_XMM9);
 	x64_sse_movaps_reg_reg(ins, X64_XMM13, X64_XMM14);
 	x64_sse_shufps_reg_reg_imm(ins, X64_XMM4, X64_XMM10, 0xEE);
+
+	/* change sign */
 	x64_sse_xorps_reg_reg(ins, X64_XMM10, X64_XMM0);
+
 	x64_sse_shufps_reg_reg_imm(ins, X64_XMM10, X64_XMM10, 0xB1);
 	x64_sse_movaps_reg_reg(ins, X64_XMM11, X64_XMM12);
 	x64_sse_movaps_reg_reg(ins, X64_XMM5, X64_XMM14);
@@ -701,12 +741,18 @@ static FFTS_INLINE void generate_leaf_oe(insns_t **fp, uint32_t *offsets)
 	x64_sse_addps_reg_reg(ins, X64_XMM6, X64_XMM2);
 	x64_sse_subps_reg_reg(ins, X64_XMM13, X64_XMM5);
 	x64_sse_addps_reg_reg(ins, X64_XMM4, X64_XMM5);
+	
+	/* change sign */
 	x64_sse_xorps_reg_reg(ins, X64_XMM7, X64_XMM0);
+	
 	x64_alu_reg_imm_size(ins, X86_ADD, X64_RAX, 4, 8);
 	x64_sse_movaps_reg_reg(ins, X64_XMM2, X64_XMM3);
 	x64_sse_shufps_reg_reg_imm(ins, X64_XMM7, X64_XMM7, 0xB1);
 	x64_sse_movaps_reg_reg(ins, X64_XMM8, X64_XMM9);
+
+	/* change sign */
 	x64_sse_xorps_reg_reg(ins, X64_XMM13, X64_XMM0);
+
 	x64_sse_addps_reg_reg(ins, X64_XMM2, X64_XMM6);
 	x64_sse_subps_reg_reg(ins, X64_XMM8, X64_XMM7);
 	x64_sse_subps_reg_reg(ins, X64_XMM3, X64_XMM6);
@@ -795,8 +841,13 @@ static FFTS_INLINE void generate_leaf_oo(insns_t **fp, uint32_t loop_count, uint
 	x64_sse_addps_reg_reg(ins, X64_XMM13, X64_XMM12);
 	x64_sse_addps_reg_reg(ins, X64_XMM3, X64_XMM9);
 	x64_sse_subps_reg_reg(ins, X64_XMM6, X64_XMM9);
+	
+	/* change sign */
 	x64_sse_xorps_reg_reg(ins, X64_XMM10, X64_XMM5);
+	
+	/* change sign */
 	x64_sse_xorps_reg_reg(ins, X64_XMM14, X64_XMM5);
+	
 	x64_sse_shufps_reg_reg_imm(ins, X64_XMM10, X64_XMM10, 0xB1);
 	x64_sse_movaps_reg_reg(ins, X64_XMM9, X64_XMM2);
 	x64_sse_shufps_reg_reg_imm(ins, X64_XMM14, X64_XMM14, 0xB1);
@@ -949,6 +1000,7 @@ static FFTS_INLINE insns_t* generate_size8_base_case(insns_t **fp, int sign)
     /* load [output + 6 * output_stride] */
 	x64_sse_movaps_reg_memindex(ins, X64_XMM13, X64_RCX, 0, X64_RSI, 1);
 
+	/* change sign */
 	x64_sse_xorps_reg_reg(ins, X64_XMM11, X64_XMM3);
 
     /* load [input + 3 * input_stride] */
@@ -993,7 +1045,10 @@ static FFTS_INLINE insns_t* generate_size8_base_case(insns_t **fp, int sign)
 	x64_sse_subps_reg_reg(ins, X64_XMM0, X64_XMM12);
 	x64_sse_addps_reg_reg(ins, X64_XMM5, X64_XMM12);
 	x64_sse_shufps_reg_reg_imm(ins, X64_XMM7, X64_XMM7, 0xB1);
+	
+	/* change sign */
 	x64_sse_xorps_reg_reg(ins, X64_XMM6, X64_XMM3);
+
 	x64_sse_shufps_reg_reg_imm(ins, X64_XMM8, X64_XMM8, 0xB1);
 	x64_sse_movaps_reg_reg(ins, X64_XMM12, X64_XMM2);
 	x64_sse_mulps_reg_reg(ins, X64_XMM7, X64_XMM9);
@@ -1016,7 +1071,10 @@ static FFTS_INLINE insns_t* generate_size8_base_case(insns_t **fp, int sign)
 	x64_sse_movaps_reg_reg(ins, X64_XMM6, X64_XMM1);
 	x64_sse_subps_reg_reg(ins, X64_XMM13, X64_XMM10);
 	x64_sse_addps_reg_reg(ins, X64_XMM11, X64_XMM10);
+	
+	/* change sign */
 	x64_sse_xorps_reg_reg(ins, X64_XMM13, X64_XMM3);
+
 	x64_sse_addps_reg_reg(ins, X64_XMM4, X64_XMM11);
 	x64_sse_subps_reg_reg(ins, X64_XMM14, X64_XMM11);
 	x64_sse_shufps_reg_reg_imm(ins, X64_XMM13, X64_XMM13, 0xB1);
