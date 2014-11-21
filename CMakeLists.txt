@@ -19,15 +19,8 @@ include_directories(BEFORE ${CMAKE_CURRENT_BINARY_DIR}/libbench2/include/libbenc
 include_directories(libbench2)
 include_directories(ffts/include)
 
-set(BENCHFFTS_SOURCES
-  bench.c
-  #fftw-bench.c
-  #fftw-bench.h
-  #hook.c
-)
-
 add_executable(bench_ffts
-  ${BENCHFFTS_SOURCES}
+  bench.c
 )
 
 target_link_libraries(bench_ffts
