@@ -28,7 +28,7 @@ include(CheckSymbolExists)
 if(MSVC)
   # use our aligned malloc/free for 32 bit Windows
   if(CMAKE_SIZEOF_VOID_P EQUAL 4)
-	add(-DWITH_OUR_MALLOC)
+    add_definitions(-DWITH_OUR_MALLOC)
   endif()
   
   add_definitions(-D_CRT_SECURE_NO_WARNINGS)
@@ -124,8 +124,8 @@ set(LIBBENCH2_SOURCES
 include_directories(BEFORE ${CMAKE_CURRENT_BINARY_DIR}/include/libbench2)
 
 configure_file(
-    ${CMAKE_CURRENT_SOURCE_DIR}/cmake/libbench2-config.h.cmake
-    ${CMAKE_CURRENT_BINARY_DIR}/include/libbench2/config.h)
+  ${CMAKE_CURRENT_SOURCE_DIR}/cmake/libbench2-config.h.cmake
+  ${CMAKE_CURRENT_BINARY_DIR}/include/libbench2/config.h)
 
 add_library(libbench2_static
   ${LIBBENCH2_SOURCES}
