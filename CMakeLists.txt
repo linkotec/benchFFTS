@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 2.8)
 
-project(benchFFTS C)
+project(bench_ffts C)
 
 # default build type is Debug which means no optimization
 if(NOT CMAKE_BUILD_TYPE)

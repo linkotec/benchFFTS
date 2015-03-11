@@ -1,5 +1,5 @@
-This directory contains a benchmarking and testing program
-for fftw3.
+This directory contains a benchmarking and testing program for FFTS.
+This is a fork of test program used by FFTW.
 
 The `bench' program has a zillion options, because we use it for
 benchmarking other FFT libraries as well.  This file only documents
