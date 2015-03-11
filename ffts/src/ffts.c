@@ -32,6 +32,7 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 
 #include "ffts.h"
+
 #include "ffts_internal.h"
 #include "macros.h"
 #include "patterns.h"
@@ -43,17 +44,19 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "codegen.h"
 #endif
 
+#if _WIN32
+#include <windows.h>
+#else
 #if __APPLE__
 #include <libkern/OSCacheControl.h>
 #endif
 
-#if _WIN32
-#include <windows.h>
-#else
+#if HAVE_SYS_MMAN_H
 #include <sys/mman.h>
 #endif
+#endif
 
-#ifdef __arm__
+#if defined(__arm__) && !defined(DYNAMIC_DISABLED)
 static const FFTS_ALIGN(64) float w_data[16] = {
     0.70710678118654757273731092936941f,
     0.70710678118654746171500846685376f,
@@ -187,10 +190,6 @@ void ffts_free_1d(ffts_plan_t *p)
         FFTS_FREE(p->ws);
     }
 
-    if (p->transforms) {
-        free(p->transforms);
-    }
-
     if (p->is) {
         free(p->is);
     }
@@ -208,29 +207,15 @@ static int ffts_generate_luts(ffts_plan_t *p, size_t N, size_t leaf_N, int sign)
     int hardcoded;
     size_t lut_size;
     size_t n_luts;
-    float *tmp;
     cdata_t *w;
     size_t i;
     size_t n;
 
-#ifdef __arm__
-    /* #ifdef HAVE_NEON */
-    V MULI_SIGN;
-
-    if(sign < 0) {
-        MULI_SIGN = VLIT4(-0.0f, 0.0f, -0.0f, 0.0f);
-    } else {
-        MULI_SIGN = VLIT4(0.0f, -0.0f, 0.0f, -0.0f);
-    }
-
-    /* #endif */
-#else
     if (sign < 0) {
         MULI_SIGN = VLIT4(-0.0f, 0.0f, -0.0f, 0.0f);
     } else {
         MULI_SIGN = VLIT4(0.0f, -0.0f, 0.0f, -0.0f);
     }
-#endif
 
     /* LUTS */
     n_luts = ffts_ctzl(N / leaf_N);
@@ -256,7 +241,7 @@ static int ffts_generate_luts(ffts_plan_t *p, size_t N, size_t leaf_N, int sign)
 
     for (i = 0; i < n_luts; i++) {
         if (!i || hardcoded) {
-#ifdef __arm__
+#if defined(__arm__) && !defined(DYNAMIC_DISABLED)
             if (N <= 32) {
                 lut_size += n/4 * 2 * sizeof(cdata_t);
             } else {
@@ -267,7 +252,7 @@ static int ffts_generate_luts(ffts_plan_t *p, size_t N, size_t leaf_N, int sign)
 #endif
             n *= 2;
         } else {
-#ifdef __arm__
+#if defined(__arm__) && !defined(DYNAMIC_DISABLED)
             lut_size += n/8 * 3 * sizeof(cdata_t);
 #else
             lut_size += n/8 * 3 * 2 * sizeof(cdata_t);
@@ -286,7 +271,7 @@ static int ffts_generate_luts(ffts_plan_t *p, size_t N, size_t leaf_N, int sign)
             goto cleanup;
         }
 
-        p->ws_is = malloc(n_luts * sizeof(*p->ws_is));
+        p->ws_is = (size_t*) malloc(n_luts * sizeof(*p->ws_is));
         if (!p->ws_is) {
             goto cleanup;
         }
@@ -318,7 +303,7 @@ static int ffts_generate_luts(ffts_plan_t *p, size_t N, size_t leaf_N, int sign)
                 w0[j][1] = W_im(n,j);
             }
 
-#ifdef __arm__
+#if defined(__arm__) && !defined(DYNAMIC_DISABLED)
             if (N < 32) {
                 // w = FFTS_MALLOC(n/4 * 2 * sizeof(cdata_t), 32);
                 float *fw = (float *)w;
@@ -375,9 +360,9 @@ static int ffts_generate_luts(ffts_plan_t *p, size_t N, size_t leaf_N, int sign)
 
             FFTS_FREE(w0);
         } else {
-            cdata_t *w0 = FFTS_MALLOC(n/8 * sizeof(cdata_t), 32);
-            cdata_t *w1 = FFTS_MALLOC(n/8 * sizeof(cdata_t), 32);
-            cdata_t *w2 = FFTS_MALLOC(n/8 * sizeof(cdata_t), 32);
+            cdata_t *w0 = (cdata_t*) FFTS_MALLOC(n/8 * sizeof(cdata_t), 32);
+            cdata_t *w1 = (cdata_t*) FFTS_MALLOC(n/8 * sizeof(cdata_t), 32);
+            cdata_t *w2 = (cdata_t*) FFTS_MALLOC(n/8 * sizeof(cdata_t), 32);
 
             float *fw0 = (float*) w0;
             float *fw1 = (float*) w1;
@@ -396,9 +381,7 @@ static int ffts_generate_luts(ffts_plan_t *p, size_t N, size_t leaf_N, int sign)
                 w2[j][1] = W_im((float) n, (float) (j + (n/8)));
             }
 
-#ifdef __arm__
-            //w = FFTS_MALLOC(n/8 * 3 * sizeof(cdata_t), 32);
-            float *fw = (float *)w;
+#if defined(__arm__) && !defined(DYNAMIC_DISABLED)
 #ifdef HAVE_NEON
             VS temp0, temp1, temp2;
             for (j = 0; j < n/8; j += 4) {
@@ -460,9 +443,7 @@ static int ffts_generate_luts(ffts_plan_t *p, size_t N, size_t leaf_N, int sign)
         n *= 2;
     }
 
-    tmp = (float *)p->ws;
-
-#ifdef __arm__
+#if defined(__arm__) && !defined(DYNAMIC_DISABLED)
     if (sign < 0) {
         p->oe_ws = (void*)(&w_data[4]);
         p->ee_ws = (void*)(w_data);
@@ -500,7 +481,8 @@ ffts_plan_t *ffts_init_1d(size_t N, int sign)
     p->destroy = ffts_free_1d;
     p->N = N;
 
-    if (ffts_generate_luts(p, N, leaf_N, sign)) {
+	/* generate lookup tables */
+    if (N > 4 && ffts_generate_luts(p, N, leaf_N, sign)) {
         goto cleanup;
     }
 
@@ -521,12 +503,7 @@ ffts_plan_t *ffts_init_1d(size_t N, int sign)
             p->i1++;
         }
 
-#ifdef __arm__
-#ifdef HAVE_NEON
-        p->i0 /= 2;
-        p->i1 /= 2;
-#endif
-#else
+#if !defined(HAVE_VFP) || defined(DYNAMIC_DISABLED)
         p->i0 /= 2;
         p->i1 /= 2;
 #endif
@@ -539,7 +516,7 @@ ffts_plan_t *ffts_init_1d(size_t N, int sign)
         }
 #else
         /* determinate transform size */
-#ifdef __arm__
+#if defined(__arm__) && !defined(DYNAMIC_DISABLED)
         if (N < 8192) {
             p->transform_size = 8192;
         } else {
@@ -559,6 +536,7 @@ ffts_plan_t *ffts_init_1d(size_t N, int sign)
             goto cleanup;
         }
 
+
         /* generate code */
         p->transform = ffts_generate_func_code(p, N, leaf_N, sign);
         if (!p->transform) {
@@ -576,14 +554,6 @@ ffts_plan_t *ffts_init_1d(size_t N, int sign)
         }
 #endif
     } else {
-        p->transforms = malloc(2 * sizeof(*p->transforms));
-        if (!p->transforms) {
-            goto cleanup;
-        }
-
-        p->transforms[0] = 0;
-        p->transforms[1] = 1;
-
         switch (N) {
         case 2:
             p->transform = &ffts_firstpass_2;

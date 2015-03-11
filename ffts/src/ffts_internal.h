@@ -42,8 +42,15 @@
 #include <malloc.h>
 #include <math.h>
 #include <stddef.h>
+
+#ifdef HAVE_STDINT_H
 #include <stdint.h>
+#endif
+
+#ifdef HAVE_STDLIB_H
 #include <stdlib.h>
+#endif
+
 #include <stdio.h>
 
 #define FFTS_PREFIX ffts
@@ -126,10 +133,7 @@ struct _ffts_plan_t {
     size_t N;
     void *lastlut;
 
-    /**
-     * Used in multidimensional Code ??
-     */
-    size_t *transforms;
+	size_t *temporary_fix_as_dynamic_code_assumes_fixed_offset;
 
     /**
      * Pointer to the dynamically generated function

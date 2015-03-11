@@ -44,8 +44,8 @@ typedef uint8_t insns_t;
 #include "codegen_arm.h"
 #include "neon.h"
 #elif HAVE_VFP
-#include "codegen_arm.h"
 #include "vfp.h"
+#include "codegen_arm.h"
 #else
 #include "codegen_sse.h"
 #endif
@@ -54,10 +54,16 @@ typedef uint8_t insns_t;
 #include <errno.h>
 #include <stddef.h>
 /* #include <stdio.h> */
-#include <stdlib.h>
-#include <string.h>
 
-#ifdef __ANDROID__
+#ifdef HAVE_STDLIB_H
+#include <stdlib.h>
+#endif
+
+#ifdef HAVE_STRING_H
+#include <string.h>
+#endif
+
+#ifdef HAVE_UNISTD_H
 #include <unistd.h>
 #endif
 
@@ -522,9 +528,6 @@ transform_func_t ffts_generate_func_code(ffts_plan_t *p, size_t N, size_t leaf_N
     //       r2 - ws
     //	ADDI(&fp, 3, 1, 0); // put N into r3 for counter
 
-    int32_t pAddr = 0;
-    int32_t pN = 0;
-    int32_t pLUT = 0;
     count = 2;
     while(pps[0]) {
 
@@ -536,11 +539,11 @@ transform_func_t ffts_generate_func_code(ffts_plan_t *p, size_t N, size_t leaf_N
             if(pps[0] - pN) ADDI(&fp, 1, 1, pps[0] - pN);
         }
 
-        if(p->ws_is[__builtin_ctzl(pps[0]/leafN)-1]*8 - pLUT)
-            ADDI(&fp, 2, 2, p->ws_is[__builtin_ctzl(pps[0]/leafN)-1]*8 - pLUT);
+        if(p->ws_is[__builtin_ctzl(pps[0]/leaf_N)-1]*8 - pLUT)
+            ADDI(&fp, 2, 2, p->ws_is[__builtin_ctzl(pps[0]/leaf_N)-1]*8 - pLUT);
 
 
-        if(pps[0] == 2*leafN) {
+        if(pps[0] == 2 * leaf_N) {
             *fp = BL(fp+2, x_4_addr);
             fp++;
         } else if(!pps[2]) {
@@ -575,7 +578,7 @@ transform_func_t ffts_generate_func_code(ffts_plan_t *p, size_t N, size_t leaf_N
 
         pAddr = pps[1] * 4;
         pN = pps[0];
-        pLUT = p->ws_is[__builtin_ctzl(pps[0]/leafN)-1]*8;//LUT_offset(pps[0], leafN);
+        pLUT = p->ws_is[__builtin_ctzl(pps[0]/leaf_N)-1]*8;//LUT_offset(pps[0], leafN);
         //	fprintf(stderr, "LUT offset for %d is %d\n", pN, pLUT);
         count += 4;
         pps += 2;
