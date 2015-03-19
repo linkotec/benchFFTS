@@ -25,14 +25,16 @@ include(CheckFunctionExists)
 include(CheckLibraryExists)
 include(CheckSymbolExists)
 
-if(MSVC)
+if(MSVC OR MINGW)
   # use our aligned malloc/free for 32 bit Windows
   if(CMAKE_SIZEOF_VOID_P EQUAL 4)
     add_definitions(-DWITH_OUR_MALLOC)
   endif()
-  
-  add_definitions(-D_CRT_SECURE_NO_WARNINGS)
-  add_definitions(-D_USE_MATH_DEFINES)
+
+  if(MSVC)
+    add_definitions(-D_CRT_SECURE_NO_WARNINGS)
+    add_definitions(-D_USE_MATH_DEFINES)
+  endif(MSVC)
 else()
   # some systems need libm for some of the math functions to work
   check_library_exists(m cos "" HAVE_LIBM)
@@ -40,7 +42,7 @@ else()
     list(APPEND CMAKE_REQUIRED_LIBRARIES m)
     list(APPEND LIBBENCH2_EXTRA_LIBRARIES m)
   endif(HAVE_LIBM)
-endif(MSVC)
+endif(MSVC OR MINGW)
 
 check_include_file(malloc.h HAVE_MALLOC_H)
 check_include_file(stdarg.h HAVE_STDARG_H)
