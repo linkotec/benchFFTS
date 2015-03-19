@@ -56,22 +56,22 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #if defined(__arm__) && !defined(DYNAMIC_DISABLED)
 static const FFTS_ALIGN(64) float w_data[16] = {
-    0.70710678118654757273731092936941f,
-    0.70710678118654746171500846685376f,
+     0.70710678118654757273731092936941f,
+     0.70710678118654746171500846685376f,
     -0.70710678118654757273731092936941f,
     -0.70710678118654746171500846685376f,
-    1.0f,
-    0.70710678118654757273731092936941f,
+     1.0f,
+     0.70710678118654757273731092936941f,
     -0.0f,
     -0.70710678118654746171500846685376f,
-    0.70710678118654757273731092936941f,
-    0.70710678118654746171500846685376f,
-    0.70710678118654757273731092936941f,
-    0.70710678118654746171500846685376f,
-    1.0f,
-    0.70710678118654757273731092936941f,
-    0.0f,
-    0.70710678118654746171500846685376f
+     0.70710678118654757273731092936941f,
+     0.70710678118654746171500846685376f,
+     0.70710678118654757273731092936941f,
+     0.70710678118654746171500846685376f,
+     1.0f,
+     0.70710678118654757273731092936941f,
+     0.0f,
+     0.70710678118654746171500846685376f
 };
 #endif
 
@@ -199,15 +199,15 @@ void ffts_free_1d(ffts_plan_t *p)
     free(p);
 }
 
-static int ffts_generate_luts(ffts_plan_t *p, size_t N, size_t leaf_N, int sign)
+static int
+ffts_generate_luts(ffts_plan_t *p, size_t N, size_t leaf_N, int sign)
 {
     V4SF MULI_SIGN;
-    int hardcoded;
-    size_t lut_size;
     size_t n_luts;
     ffts_cpx_32f *w;
-    size_t i;
-    size_t n;
+    ffts_cpx_32f *tmp;
+    size_t i, j, m, n;
+    int stride;
 
     if (sign < 0) {
         MULI_SIGN = V4SF_LIT4(-0.0f, 0.0f, -0.0f, 0.0f);
@@ -217,53 +217,19 @@ static int ffts_generate_luts(ffts_plan_t *p, size_t N, size_t leaf_N, int sign)
 
     /* LUTS */
     n_luts = ffts_ctzl(N / leaf_N);
-    if (N < 32) {
-        n_luts = ffts_ctzl(N / 4);
-        hardcoded = 1;
-    } else {
-        hardcoded = 0;
-    }
-
     if (n_luts >= 32) {
         n_luts = 0;
     }
 
-    /* fprintf(stderr, "n_luts = %zu\n", n_luts); */
-
-    n = leaf_N * 2;
-    if (hardcoded) {
-        n = 8;
-    }
-
-    lut_size = 0;
-
-    for (i = 0; i < n_luts; i++) {
-        if (!i || hardcoded) {
-#if defined(__arm__) && !defined(DYNAMIC_DISABLED)
-            if (N <= 32) {
-                lut_size += n/4 * 2 * sizeof(ffts_cpx_32f);
-            } else {
-                lut_size += n/4 * sizeof(ffts_cpx_32f);
-            }
-#else
-            lut_size += n/4 * 2 * sizeof(ffts_cpx_32f);
-#endif
-            n *= 2;
-        } else {
-#if defined(__arm__) && !defined(DYNAMIC_DISABLED)
-            lut_size += n/8 * 3 * sizeof(ffts_cpx_32f);
-#else
-            lut_size += n/8 * 3 * 2 * sizeof(ffts_cpx_32f);
-#endif
-        }
-        n *= 2;
-    }
-
-    /* lut_size *= 16; */
-
-    /* fprintf(stderr, "lut size = %zu\n", lut_size); */
-
     if (n_luts) {
+        size_t lut_size;
+
+#if defined(__arm__) && !defined(DYNAMIC_DISABLED)
+        lut_size = leaf_N * (((1 << n_luts) - 2) * 3 + 1) * sizeof(ffts_cpx_32f) / 2;
+#else
+        lut_size = leaf_N * (((1 << n_luts) - 2) * 3 + 1) * sizeof(ffts_cpx_32f);
+#endif
+
         p->ws = FFTS_MALLOC(lut_size, 32);
         if (!p->ws) {
             goto cleanup;
@@ -276,75 +242,51 @@ static int ffts_generate_luts(ffts_plan_t *p, size_t N, size_t leaf_N, int sign)
     }
 
     w = p->ws;
-
     n = leaf_N * 2;
-    if (hardcoded) {
-        n = 8;
-    }
 
 #ifdef HAVE_NEON
     V4SF neg = (sign < 0) ? V4SF_LIT4(0.0f, 0.0f, 0.0f, 0.0f) : V4SF_LIT4(-0.0f, -0.0f, -0.0f, -0.0f);
 #endif
 
+    /* calculate factors */
+    m = leaf_N << (n_luts - 2);
+    tmp = FFTS_MALLOC(m * sizeof(ffts_cpx_32f), 32);
+
+    for (i = 0; i < m; i++) {
+        tmp[i][0] = W_re(4*m, i);
+        tmp[i][1] = W_im(4*m, i);
+    }
+
+	/* generate lookup tables */
+    stride = 1 << (n_luts - 1);
     for (i = 0; i < n_luts; i++) {
         p->ws_is[i] = w - (ffts_cpx_32f*) p->ws;
-        //fprintf(stderr, "LUT[%zu] = %d @ %08x - %zu\n", i, n, w, p->ws_is[i]);
 
-        if(!i || hardcoded) {
+        if (!i) {
             ffts_cpx_32f *w0 = FFTS_MALLOC(n/4 * sizeof(ffts_cpx_32f), 32);
             float *fw0 = (float*) w0;
-            float *fw = (float *)w;
+            float *fw = (float*) w;
 
-            size_t j;
             for (j = 0; j < n/4; j++) {
-                w0[j][0] = W_re(n,j);
-                w0[j][1] = W_im(n,j);
+                w0[j][0] = tmp[j * stride][0];
+                w0[j][1] = tmp[j * stride][1];
             }
 
 #if defined(__arm__) && !defined(DYNAMIC_DISABLED)
-            if (N < 32) {
-                // w = FFTS_MALLOC(n/4 * 2 * sizeof(ffts_cpx_32f), 32);
-                float *fw = (float *)w;
-                V4SF temp0, temp1, temp2;
-                for (j=0; j<n/4; j+=2) {
-                    //	#ifdef HAVE_NEON
-                    temp0 = V4SF_LD(fw0 + j*2);
-                    V4SF re, im;
-                    re = V4SF_DUPLICATE_RE(temp0);
-                    im = V4SF_DUPLICATE_IM(temp0);
 #ifdef HAVE_NEON
-                    im = V4SF_XOR(im, MULI_SIGN);
-                    //im = IMULI(sign>0, im);
-#else
-                    im = V4SF_MULI(sign>0, im);
-#endif
-                    V4SF_ST(fw + j*4  , re);
-                    V4SF_ST(fw + j*4+4, im);
-                    //		#endif
-                }
-                w += n/4 * 2;
-            } else {
-                //w = FFTS_MALLOC(n/4 * sizeof(ffts_cpx_32f), 32);
-                float *fw = (float *)w;
-#ifdef HAVE_NEON
-				{
-                V4SF2 temp0, temp1, temp2;
-                for (j=0; j<n/4; j+=4) {
-                    temp0 = V4SF2_LD(fw0 + j*2);
-                    temp0.val[1] = V4SF_XOR(temp0.val[1], neg);
-                    V4SF2_STORE_SPR(fw + j*2, temp0);
-                }
-				}
-#else
-                for (j=0; j<n/4; j+=1) {
-                    fw[j*2] = fw0[j*2];
-                    fw[j*2+1] = (sign < 0) ? fw0[j*2+1] : -fw0[j*2+1];
-                }
-#endif
-                w += n/4;
+            for (j = 0; j < n/4; j += 4) {
+                V4SF2 temp0 = V4SF2_LD(fw0 + j*2);
+                temp0.val[1] = V4SF_XOR(temp0.val[1], neg);
+                V4SF2_STORE_SPR(fw + j*2, temp0);
             }
 #else
-            //w = FFTS_MALLOC(n/4 * 2 * sizeof(ffts_cpx_32f), 32);
+            for (j = 0; j < n/4; j++) {
+                fw[j*2+0] = fw0[j*2+0];
+                fw[j*2+1] = (sign < 0) ? fw0[j*2+1] : -fw0[j*2+1];
+            }
+#endif
+            w += n/4;
+#else
             for (j = 0; j < n/4; j += 2) {
                 V4SF re, im, temp0;
                 temp0 = V4SF_LD(fw0 + j*2);
@@ -369,37 +311,38 @@ static int ffts_generate_luts(ffts_plan_t *p, size_t N, size_t leaf_N, int sign)
             float *fw2 = (float*) w2;
 
             float *fw = (float *)w;
-            V4SF temp0, temp1, temp2, re, im;
 
-            size_t j;
             for (j = 0; j < n/8; j++) {
-                w0[j][0] = W_re((float) n, (float) 2*j);
-                w0[j][1] = W_im((float) n, (float) 2*j);
-                w1[j][0] = W_re((float) n, (float) j);
-                w1[j][1] = W_im((float) n, (float) j);
-                w2[j][0] = W_re((float) n, (float) (j + (n/8)));
-                w2[j][1] = W_im((float) n, (float) (j + (n/8)));
+                w0[j][0] = tmp[2 * j * stride][0];
+                w0[j][1] = tmp[2 * j * stride][1];
+
+                w1[j][0] = tmp[j * stride][0];
+                w1[j][1] = tmp[j * stride][1];
+
+                w2[j][0] = tmp[(j + (n/8)) * stride][0];
+                w2[j][1] = tmp[(j + (n/8)) * stride][1];
             }
 
 #if defined(__arm__) && !defined(DYNAMIC_DISABLED)
 #ifdef HAVE_NEON
-			{
-            V4SF2 temp0, temp1, temp2;
             for (j = 0; j < n/8; j += 4) {
+                V4SF2 temp0, temp1, temp2;
+
                 temp0 = V4SF2_LD(fw0 + j*2);
                 temp0.val[1] = V4SF_XOR(temp0.val[1], neg);
                 V4SF2_STORE_SPR(fw + j*2*3, temp0);
+                
                 temp1 = V4SF2_LD(fw1 + j*2);
                 temp1.val[1] = V4SF_XOR(temp1.val[1], neg);
                 V4SF2_STORE_SPR(fw + j*2*3 + 8,  temp1);
+                
                 temp2 = V4SF2_LD(fw2 + j*2);
                 temp2.val[1] = V4SF_XOR(temp2.val[1], neg);
                 V4SF2_STORE_SPR(fw + j*2*3 + 16, temp2);
             }
-			}
 #else
-            for (j = 0; j < n/8; j += 1) {
-                fw[j*6] = fw0[j*2];
+            for (j = 0; j < n/8; j++) {
+                fw[j*6+0] = fw0[j*2+0];
                 fw[j*6+1] = (sign < 0) ? fw0[j*2+1] : -fw0[j*2+1];
                 fw[j*6+2] = fw1[j*2+0];
                 fw[j*6+3] = (sign < 0) ? fw1[j*2+1] : -fw1[j*2+1];
@@ -409,13 +352,14 @@ static int ffts_generate_luts(ffts_plan_t *p, size_t N, size_t leaf_N, int sign)
 #endif
             w += n/8 * 3;
 #else
-            //w = FFTS_MALLOC(n/8 * 3 * 2 * sizeof(ffts_cpx_32f), 32);
             for (j = 0; j < n/8; j += 2) {
+                V4SF temp0, temp1, temp2, re, im;
+
                 temp0 = V4SF_LD(fw0 + j*2);
                 re = V4SF_DUPLICATE_RE(temp0);
                 im = V4SF_DUPLICATE_IM(temp0);
                 im = V4SF_XOR(im, MULI_SIGN);
-                V4SF_ST(fw + j*2*6  , re);
+                V4SF_ST(fw + j*2*6+0, re);
                 V4SF_ST(fw + j*2*6+4, im);
 
                 temp1 = V4SF_LD(fw1 + j*2);
@@ -440,9 +384,9 @@ static int ffts_generate_luts(ffts_plan_t *p, size_t N, size_t leaf_N, int sign)
             FFTS_FREE(w1);
             FFTS_FREE(w2);
         }
-        ///p->ws[i] = w;
 
         n *= 2;
+        stride >>= 1;
     }
 
 #if defined(__arm__) && !defined(DYNAMIC_DISABLED)
@@ -457,6 +401,8 @@ static int ffts_generate_luts(ffts_plan_t *p, size_t N, size_t leaf_N, int sign)
     }
 #endif
 
+    FFTS_FREE(tmp);
+
     p->lastlut = w;
     p->n_luts = n_luts;
     return 0;
@@ -465,7 +411,8 @@ cleanup:
     return -1;
 }
 
-ffts_plan_t *ffts_init_1d(size_t N, int sign)
+ffts_plan_t*
+ffts_init_1d(size_t N, int sign)
 {
     const size_t leaf_N = 8;
     ffts_plan_t *p;
@@ -483,12 +430,12 @@ ffts_plan_t *ffts_init_1d(size_t N, int sign)
     p->destroy = ffts_free_1d;
     p->N = N;
 
-	/* generate lookup tables */
-    if (N > 4 && ffts_generate_luts(p, N, leaf_N, sign)) {
-        goto cleanup;
-    }
-
     if (N >= 32) {
+        /* generate lookup tables */
+        if (ffts_generate_luts(p, N, leaf_N, sign)) {
+            goto cleanup;
+        }
+
         p->offsets = ffts_init_offsets(N, leaf_N);
         if (!p->offsets) {
             goto cleanup;
@@ -518,7 +465,7 @@ ffts_plan_t *ffts_init_1d(size_t N, int sign)
         }
 #else
         /* determinate transform size */
-#if defined(__arm__) && !defined(DYNAMIC_DISABLED)
+#if defined(__arm__)
         if (N < 8192) {
             p->transform_size = 8192;
         } else {
@@ -537,7 +484,6 @@ ffts_plan_t *ffts_init_1d(size_t N, int sign)
         if (!p->transform_base) {
             goto cleanup;
         }
-
 
         /* generate code */
         p->transform = ffts_generate_func_code(p, N, leaf_N, sign);
