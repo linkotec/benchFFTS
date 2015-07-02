@@ -79,7 +79,8 @@
 #define M_PI 3.1415926535897932384626433832795028841971693993751058209
 #endif
 
-typedef void (*transform_func_t)(ffts_plan_t *p, const void *in, void *out);
+struct _ffts_plan_t;
+typedef void (*transform_func_t)(struct _ffts_plan_t *p, const void *in, void *out);
 
 /**
  * Contains all the Information need to perform FFT
@@ -172,7 +173,7 @@ struct _ffts_plan_t {
      * to clean up the plan after use
      * (differs for real and multi dimension transforms
      */
-    void (*destroy)(ffts_plan_t *);
+    void (*destroy)(struct _ffts_plan_t *);
 
     /**
      * Coefficiants for the real valued transforms
@@ -222,15 +223,5 @@ static __inline unsigned long ffts_ctzl(size_t N)
 }
 #endif /* _WIN64 */
 #endif /* _MSC_VER */
-
-static FFTS_ALWAYS_INLINE float W_re(float N, float k)
-{
-    return cos(-2.0 * M_PI * k / N);
-}
-
-static FFTS_ALWAYS_INLINE float W_im(float N, float k)
-{
-    return sin(-2.0 * M_PI * k / N);
-}
 
 #endif /* FFTS_INTERNAL_H */
