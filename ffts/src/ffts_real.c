@@ -4,6 +4,7 @@ This file is part of FFTS -- The Fastest Fourier Transform in the South
 
 Copyright (c) 2012, Anthony M. Blake <amb@anthonix.com>
 Copyright (c) 2012, The University of Waikato
+Copyright (c) 2015, Jukka Ojanen <jukka.ojanen@kolumbus.fi>
 
 All rights reserved.
 
@@ -40,7 +41,8 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include <xmmintrin.h>
 #endif
 
-static void ffts_free_1d_real(ffts_plan_t *p)
+static void
+ffts_free_1d_real(ffts_plan_t *p)
 {
     if (p->B) {
         ffts_aligned_free(p->B);
@@ -54,21 +56,26 @@ static void ffts_free_1d_real(ffts_plan_t *p)
         ffts_aligned_free(p->buf);
     }
 
-    if (p->plans) {
+    if (p->plans[0]) {
         ffts_free(p->plans[0]);
-        free(p->plans);
     }
 
     free(p);
 }
 
-static void ffts_execute_1d_real(ffts_plan_t *p, const void *vin, void *vout)
+static void
+ffts_execute_1d_real(ffts_plan_t *p, const void *input, void *output)
 {
-    float *out = (float*) vout;
-    float *buf = (float*) p->buf;
-    float *A = p->A;
-    float *B = p->B;
-    size_t N = p->N;
+    float *const FFTS_RESTRICT out =
+        (float *const FFTS_RESTRICT) FFTS_ASSUME_ALIGNED_16(output);
+    float *const FFTS_RESTRICT buf =
+        (float *const FFTS_RESTRICT) FFTS_ASSUME_ALIGNED_32(p->buf);
+    const float *const FFTS_RESTRICT A =
+        (const float *const FFTS_RESTRICT) FFTS_ASSUME_ALIGNED_32(p->A);
+    const float *const FFTS_RESTRICT B =
+        (const float *const FFTS_RESTRICT) FFTS_ASSUME_ALIGNED_32(p->B);
+    const int N = (const int) p->N;
+    int i;
 
 #ifdef __ARM_NEON__
     float *p_buf0 = buf;
@@ -76,9 +83,10 @@ static void ffts_execute_1d_real(ffts_plan_t *p, const void *vin, void *vout)
     float *p_out = out;
 #endif
 
-    size_t i;
+    /* we know this */
+    FFTS_ASSUME(N/2 > 0);
 
-    p->plans[0]->transform(p->plans[0], vin, buf);
+    p->plans[0]->transform(p->plans[0], input, buf);
 
     buf[N + 0] = buf[0];
     buf[N + 1] = buf[1];
@@ -126,10 +134,58 @@ static void ffts_execute_1d_real(ffts_plan_t *p, const void *vin, void *vout)
             : "memory", "q8", "q9", "q10", "q11", "q12", "q13", "q14", "q15"
         );
     }
+#elif HAVE_SSE
+    if (N < 8) {
+        for (i = 0; i < N/2; i++) {
+            out[2*i + 0] =
+                buf[    2*i + 0] * A[2*i + 0] - buf[    2*i + 1] * A[2*i + 1] +
+                buf[N - 2*i + 0] * B[2*i + 0] + buf[N - 2*i + 1] * B[2*i + 1];
+            out[2*i + 1] =
+                buf[    2*i + 1] * A[2*i + 0] + buf[    2*i + 0] * A[2*i + 1] +
+                buf[N - 2*i + 0] * B[2*i + 1] - buf[N - 2*i + 1] * B[2*i + 0];
+        }
+    } else {
+        const __m128 c0 = _mm_set_ps(0.0f, -0.0f, 0.0f, -0.0f);
+        __m128 t0 = _mm_load_ps(buf);
+
+        for (i = 0; i < N; i += 8) {
+            __m128 t1 = _mm_load_ps(buf + i);
+            __m128 t2 = _mm_load_ps(buf + N - i - 4);
+            __m128 t3 = _mm_load_ps(A + i);
+            __m128 t4 = _mm_load_ps(B + i);
+
+            _mm_store_ps(out + i, _mm_add_ps(_mm_add_ps(_mm_add_ps(
+                _mm_mul_ps(t1, _mm_shuffle_ps(t3, t3, _MM_SHUFFLE(2,2,0,0))),
+                _mm_mul_ps(_mm_shuffle_ps(t1, t1, _MM_SHUFFLE(2,3,0,1)),
+                _mm_xor_ps(_mm_shuffle_ps(t3, t3, _MM_SHUFFLE(3,3,1,1)), c0))),
+                _mm_mul_ps(_mm_shuffle_ps(t0, t2, _MM_SHUFFLE(2,2,0,0)), t4)),
+                _mm_mul_ps(_mm_shuffle_ps(t0, t2, _MM_SHUFFLE(3,3,1,1)),
+                _mm_shuffle_ps(_mm_xor_ps(t4, c0), _mm_xor_ps(t4, c0),
+                _MM_SHUFFLE(2,3,0,1)))));
+
+            t0 = _mm_load_ps(buf + N - i - 8);
+            t1 = _mm_load_ps(buf + i + 4);
+            t3 = _mm_load_ps(A + i + 4);
+            t4 = _mm_load_ps(B + i + 4);
+
+            _mm_store_ps(out + i + 4, _mm_add_ps(_mm_add_ps(_mm_add_ps(
+                _mm_mul_ps(t1, _mm_shuffle_ps(t3, t3, _MM_SHUFFLE(2,2,0,0))),
+                _mm_mul_ps(_mm_shuffle_ps(t1, t1, _MM_SHUFFLE(2,3,0,1)),
+                _mm_xor_ps(_mm_shuffle_ps(t3, t3, _MM_SHUFFLE(3,3,1,1)), c0))),
+                _mm_mul_ps(_mm_shuffle_ps(t2, t0, _MM_SHUFFLE(2,2,0,0)), t4)),
+                _mm_mul_ps(_mm_shuffle_ps(t2, t0, _MM_SHUFFLE(3,3,1,1)),
+                _mm_shuffle_ps(_mm_xor_ps(t4, c0), _mm_xor_ps(t4, c0),
+                _MM_SHUFFLE(2,3,0,1)))));
+        }
+    }
 #else
     for (i = 0; i < N/2; i++) {
-        out[2*i + 0] = buf[2*i + 0] * A[2*i] - buf[2*i + 1] * A[2*i + 1] + buf[N - 2*i] * B[2*i + 0] + buf[N - 2*i + 1] * B[2*i + 1];
-        out[2*i + 1] = buf[2*i + 1] * A[2*i] + buf[2*i + 0] * A[2*i + 1] + buf[N - 2*i] * B[2*i + 1] - buf[N - 2*i + 1] * B[2*i + 0];
+        out[2*i + 0] =
+            buf[    2*i + 0] * A[2*i + 0] - buf[    2*i + 1] * A[2*i + 1] +
+            buf[N - 2*i + 0] * B[2*i + 0] + buf[N - 2*i + 1] * B[2*i + 1];
+        out[2*i + 1] =
+            buf[    2*i + 1] * A[2*i + 0] + buf[    2*i + 0] * A[2*i + 1] +
+            buf[N - 2*i + 0] * B[2*i + 1] - buf[N - 2*i + 1] * B[2*i + 0];
     }
 #endif
 
@@ -137,14 +193,19 @@ static void ffts_execute_1d_real(ffts_plan_t *p, const void *vin, void *vout)
     out[N + 1] = 0.0f;
 }
 
-static void ffts_execute_1d_real_inv(ffts_plan_t *p, const void *vin, void *vout)
+static void
+ffts_execute_1d_real_inv(ffts_plan_t *p, const void *input, void *output)
 {
-    float *out = (float*) vout;
-    float *in = (float*) vin;
-    float *buf = (float*) p->buf;
-    float *A = p->A;
-    float *B = p->B;
-    size_t N = p->N;
+    float *const FFTS_RESTRICT in =
+        (float *const FFTS_RESTRICT) FFTS_ASSUME_ALIGNED_16(input);
+    float *const FFTS_RESTRICT buf =
+        (float *const FFTS_RESTRICT) FFTS_ASSUME_ALIGNED_32(p->buf);
+    const float *const FFTS_RESTRICT A =
+        (const float *const FFTS_RESTRICT) FFTS_ASSUME_ALIGNED_32(p->A);
+    const float *const FFTS_RESTRICT B =
+        (const float *const FFTS_RESTRICT) FFTS_ASSUME_ALIGNED_32(p->B);
+    const int N = (const int) p->N;
+    int i;
 
 #ifdef __ARM_NEON__
     float *p_buf0 = in;
@@ -152,7 +213,8 @@ static void ffts_execute_1d_real_inv(ffts_plan_t *p, const void *vin, void *vout
     float *p_out = buf;
 #endif
 
-    size_t i;
+    /* we know this */
+    FFTS_ASSUME(N/2 > 0);
 
 #ifdef __ARM_NEON__
     for (i = 0; i < N/2; i += 2) {
@@ -197,22 +259,71 @@ static void ffts_execute_1d_real_inv(ffts_plan_t *p, const void *vin, void *vout
             : "memory", "q8", "q9", "q10", "q11", "q12", "q13", "q14", "q15"
         );
     }
+#elif HAVE_SSE
+    if (N < 8) {
+        for (i = 0; i < N/2; i++) {
+            buf[2*i + 0] =
+                in[    2*i + 0] * A[2*i + 0] + in[    2*i + 1] * A[2*i + 1] +
+                in[N - 2*i + 0] * B[2*i + 0] - in[N - 2*i + 1] * B[2*i + 1];
+            buf[2*i + 1] =
+                in[    2*i + 1] * A[2*i + 0] - in[    2*i + 0] * A[2*i + 1] -
+                in[N - 2*i + 0] * B[2*i + 1] - in[N - 2*i + 1] * B[2*i + 0];
+        }
+    } else {
+        const __m128 c0 = _mm_set_ps(-0.0f, 0.0f, -0.0f, 0.0f);
+        __m128 t0 = _mm_loadl_pi(_mm_setzero_ps(), (const __m64*) &in[N]);
+
+        for (i = 0; i < N; i += 8) {
+            __m128 t1 = _mm_load_ps(in + i);
+            __m128 t2 = _mm_load_ps(in + N - i - 4);
+            __m128 t3 = _mm_load_ps(A + i);
+            __m128 t4 = _mm_load_ps(B + i);
+
+            _mm_store_ps(buf + i, _mm_add_ps(_mm_sub_ps(_mm_add_ps(
+                _mm_mul_ps(t1, _mm_shuffle_ps(t3, t3, _MM_SHUFFLE(2,2,0,0))),
+                _mm_mul_ps(_mm_shuffle_ps(t1, t1, _MM_SHUFFLE(2,3,0,1)),
+                _mm_xor_ps(_mm_shuffle_ps(t3, t3, _MM_SHUFFLE(3,3,1,1)), c0))),
+                _mm_mul_ps(_mm_shuffle_ps(t0, t2, _MM_SHUFFLE(3,3,1,1)),
+                _mm_shuffle_ps(t4, t4, _MM_SHUFFLE(2,3,0,1)))),
+                _mm_mul_ps(_mm_shuffle_ps(t0, t2, _MM_SHUFFLE(2,2,0,0)),
+                _mm_xor_ps(t4, c0))));
+
+            t0 = _mm_load_ps(in + N - i - 8);
+            t1 = _mm_load_ps(in + i + 4);
+            t3 = _mm_load_ps(A + i + 4);
+            t4 = _mm_load_ps(B + i + 4);
+
+            _mm_store_ps(buf + i + 4, _mm_add_ps(_mm_sub_ps(_mm_add_ps(
+                _mm_mul_ps(t1, _mm_shuffle_ps(t3, t3, _MM_SHUFFLE(2,2,0,0))),
+                _mm_mul_ps(_mm_shuffle_ps(t1, t1, _MM_SHUFFLE(2,3,0,1)),
+                _mm_xor_ps(_mm_shuffle_ps(t3, t3, _MM_SHUFFLE(3,3,1,1)), c0))),
+                _mm_mul_ps(_mm_shuffle_ps(t2, t0, _MM_SHUFFLE(3,3,1,1)),
+                _mm_shuffle_ps(t4, t4, _MM_SHUFFLE(2,3,0,1)))),
+                _mm_mul_ps(_mm_shuffle_ps(t2, t0, _MM_SHUFFLE(2,2,0,0)),
+                _mm_xor_ps(t4, c0))));
+        }
+    }
 #else
     for (i = 0; i < N/2; i++) {
-        buf[2*i + 0] = in[2*i + 0] * A[2*i] + in[2*i + 1] * A[2*i + 1] + in[N - 2*i] * B[2*i + 0] - in[N - 2*i + 1] * B[2*i + 1];
-        buf[2*i + 1] = in[2*i + 1] * A[2*i] - in[2*i + 0] * A[2*i + 1] - in[N - 2*i] * B[2*i + 1] - in[N - 2*i + 1] * B[2*i + 0];
+        buf[2*i + 0] =
+            in[    2*i + 0] * A[2*i + 0] + in[    2*i + 1] * A[2*i + 1] +
+            in[N - 2*i + 0] * B[2*i + 0] - in[N - 2*i + 1] * B[2*i + 1];
+        buf[2*i + 1] =
+            in[    2*i + 1] * A[2*i + 0] - in[    2*i + 0] * A[2*i + 1] -
+            in[N - 2*i + 0] * B[2*i + 1] - in[N - 2*i + 1] * B[2*i + 0];
     }
 #endif
 
-    p->plans[0]->transform(p->plans[0], buf, out);
+    p->plans[0]->transform(p->plans[0], buf, output);
 }
 
-ffts_plan_t *ffts_init_1d_real(size_t N, int sign)
+ffts_plan_t*
+ffts_init_1d_real(size_t N, int sign)
 {
     ffts_plan_t *p;
     size_t i;
 
-    p = (ffts_plan_t*) calloc(1, sizeof(*p));
+    p = (ffts_plan_t*) calloc(1, sizeof(*p) + sizeof(*p->plans));
     if (!p) {
         return NULL;
     }
@@ -226,11 +337,7 @@ ffts_plan_t *ffts_init_1d_real(size_t N, int sign)
     p->destroy = &ffts_free_1d_real;
     p->N       = N;
     p->rank    = 1;
-
-    p->plans = (ffts_plan_t**) malloc(1 * sizeof(*p->plans));
-    if (!p->plans) {
-        goto cleanup;
-    }
+    p->plans   = (ffts_plan_t**) &p[1];
 
     p->plans[0] = ffts_init_1d(N/2, sign);
     if (!p->plans[0]) {
