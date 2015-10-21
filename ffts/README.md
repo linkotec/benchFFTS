@@ -1,5 +1,6 @@
-FFTS -- The Fastest Fourier Transform in the South
-by Anthony Blake <anthonix@me.com>
+# FFTS -- The Fastest Fourier Transform in the South
+
+[![Build Status](https://travis-ci.org/linkotec/ffts.svg?branch=master)](https://travis-ci.org/linkotec/ffts)
 
 To build for Android, edit and run build_android.sh
 
@@ -26,9 +27,9 @@ work.
 
 If you like FFTS, please show your support by sending a postcard to:
 
-Anthony Blake
-Department of Computer Science
-The University of Waikato
-Private Bag 3105
-Hamilton 3240
+Anthony Blake<br>
+Department of Computer Science<br>
+The University of Waikato<br>
+Private Bag 3105<br>
+Hamilton 3240<br>
 NEW ZEALAND
