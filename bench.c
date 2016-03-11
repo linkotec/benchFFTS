@@ -518,18 +518,24 @@ FFTW(plan) mkplan(bench_problem *p, unsigned flags)
 
 int can_do(bench_problem *p)
 {
-	bench_tensor *sz;
+	bench_tensor *sz = p->sz;
+	int i;
 
 	if (p->kind != PROBLEM_COMPLEX &&
 		p->kind != PROBLEM_REAL) {
 		return 0;
 	}
 
-	sz = p->sz;
-	if (sz->rnk != 1) {
+	if (sz->rnk < 1 || sz->rnk > 2) {
 		return 0;
 	}
 
+	for (i = 0; i < sz->rnk; ++i) {
+		if (!power_of_two(sz->dims[i].n)) {
+			return 0;
+		}
+	}
+	
 	return 1;
 }
 
@@ -575,6 +581,7 @@ void main_init(int *argc, char ***argv)
 
 void setup(bench_problem *p)
 {
+	bench_tensor *sz = p->sz;
 	ffts_plan_t *plan;
 	double tim;
 
@@ -583,10 +590,18 @@ void setup(bench_problem *p)
 	switch(p->kind)
 	{
 	case PROBLEM_COMPLEX:
-		plan = ffts_init_1d(p->sz->dims->n, p->sign);
+		if (sz->rnk == 1) {
+			plan = ffts_init_1d(sz->dims[0].n, p->sign);
+		} else {
+			plan = ffts_init_2d(sz->dims[0].n, sz->dims[1].n, p->sign);
+		}
 		break;
 	case PROBLEM_REAL:
-		plan = ffts_init_1d_real(p->sz->dims->n, p->sign);
+		if (sz->rnk == 1) {
+			plan = ffts_init_1d_real(sz->dims[0].n, p->sign);
+		} else {
+			plan = ffts_init_2d_real(sz->dims[0].n, sz->dims[1].n, p->sign);
+		}
 		break;
 	default:
 		BENCH_ASSERT(0);
