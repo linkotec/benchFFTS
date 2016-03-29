@@ -2,6 +2,7 @@
 
 This file is part of FFTS -- The Fastest Fourier Transform in the South
 
+Copyright (c) 2016, Jukka Ojanen <jukka.ojanen@kolumbus.fi>
 Copyright (c) 2012, Anthony M. Blake <amb@anthonix.com>
 Copyright (c) 2012, The University of Waikato
 
@@ -43,7 +44,8 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #define TSIZE 8
 
-static void ffts_free_nd(ffts_plan_t *p)
+static void
+ffts_free_nd(ffts_plan_t *p)
 {
     if (p->plans) {
         int i;
@@ -82,84 +84,18 @@ static void ffts_free_nd(ffts_plan_t *p)
         ffts_aligned_free(p->buf);
     }
 
-    if (p->transpose_buf) {
-        ffts_aligned_free(p->transpose_buf);
-    }
-
     free(p);
 }
 
-static void ffts_transpose(uint64_t *in, uint64_t *out, int w, int h, uint64_t *buf)
+static void
+ffts_transpose(uint64_t *in, uint64_t *out, int w, int h)
 {
 #ifdef HAVE_NEON
-    size_t i, j, k;
-    int linebytes = 8 * w;
-
-    for (j = 0; j < h; j += 8) {
-        for (i = 0; i < w; i += 8) {
-            neon_transpose_to_buf(in + j*w + i, buf, w);
-
-            uint64_t *p = out + i*h + j;
-            uint64_t *pbuf = buf;
-            uint64_t *ptemp;
-
-            __asm__ __volatile__(
-                "mov %[ptemp], %[p]\n\t"
-                "add %[p], %[p], %[w], lsl #3\n\t"
-                "vld1.32 {q8,q9}, [%[pbuf], :128]!\n\t"
-                "vld1.32 {q10,q11}, [%[pbuf], :128]!\n\t"
-                "vld1.32 {q12,q13}, [%[pbuf], :128]!\n\t"
-                "vld1.32 {q14,q15}, [%[pbuf], :128]!\n\t"
-                "vst1.32 {q8,q9}, [%[ptemp], :128]!\n\t"
-                "vst1.32 {q10,q11}, [%[ptemp], :128]!\n\t"
-                "mov %[ptemp], %[p]\n\t"
-                "add %[p], %[p], %[w], lsl #3\n\t"
-                "vst1.32 {q12,q13}, [%[ptemp], :128]!\n\t"
-                "vst1.32 {q14,q15}, [%[ptemp], :128]!\n\t"
-                "mov %[ptemp], %[p]\n\t"
-                "add %[p], %[p], %[w], lsl #3\n\t"
-                "vld1.32 {q8,q9}, [%[pbuf], :128]!\n\t"
-                "vld1.32 {q10,q11}, [%[pbuf], :128]!\n\t"
-                "vld1.32 {q12,q13}, [%[pbuf], :128]!\n\t"
-                "vld1.32 {q14,q15}, [%[pbuf], :128]!\n\t"
-                "vst1.32 {q8,q9}, [%[ptemp], :128]!\n\t"
-                "vst1.32 {q10,q11}, [%[ptemp], :128]!\n\t"
-                "mov %[ptemp], %[p]\n\t"
-                "add %[p], %[p], %[w], lsl #3\n\t"
-                "vst1.32 {q12,q13}, [%[ptemp], :128]!\n\t"
-                "vst1.32 {q14,q15}, [%[ptemp], :128]!\n\t"
-                "mov %[ptemp], %[p]\n\t"
-                "add %[p], %[p], %[w], lsl #3\n\t"
-                "vld1.32 {q8,q9}, [%[pbuf], :128]!\n\t"
-                "vld1.32 {q10,q11}, [%[pbuf], :128]!\n\t"
-                "vld1.32 {q12,q13}, [%[pbuf], :128]!\n\t"
-                "vld1.32 {q14,q15}, [%[pbuf], :128]!\n\t"
-                "vst1.32 {q8,q9}, [%[ptemp], :128]!\n\t"
-                "vst1.32 {q10,q11}, [%[ptemp], :128]!\n\t"
-                "mov %[ptemp], %[p]\n\t"
-                "add %[p], %[p], %[w], lsl #3\n\t"
-                "vst1.32 {q12,q13}, [%[ptemp], :128]!\n\t"
-                "vst1.32 {q14,q15}, [%[ptemp], :128]!\n\t"
-                "mov %[ptemp], %[p]\n\t"
-                "add %[p], %[p], %[w], lsl #3\n\t"
-                "vld1.32 {q8,q9}, [%[pbuf], :128]!\n\t"
-                "vld1.32 {q10,q11}, [%[pbuf], :128]!\n\t"
-                "vld1.32 {q12,q13}, [%[pbuf], :128]!\n\t"
-                "vld1.32 {q14,q15}, [%[pbuf], :128]!\n\t"
-                "vst1.32 {q8,q9}, [%[ptemp], :128]!\n\t"
-                "vst1.32 {q10,q11}, [%[ptemp], :128]!\n\t"
-                "mov %[ptemp], %[p]\n\t"
-                "vst1.32 {q12,q13}, [%[ptemp], :128]!\n\t"
-                "vst1.32 {q14,q15}, [%[ptemp], :128]!\n\t"
-
-                : [p] "+r" (p), [pbuf] "+r" (pbuf), [ptemp] "+r" (ptemp)
-                : [w] "r" (w)
-                : "memory", "q8", "q9", "q10", "q11"
-            );
-
-            /* out[i*h + j] = in[j*w + i]; */
-        }
-    }
+#if 0
+    neon_transpose4(in, out, w, h);
+#else
+    neon_transpose8(in, out, w, h);
+#endif
 #else
 #ifdef HAVE_SSE
     uint64_t FFTS_ALIGN(64) tmp[TSIZE*TSIZE];
@@ -253,7 +189,8 @@ static void ffts_transpose(uint64_t *in, uint64_t *out, int w, int h, uint64_t *
 #endif
 }
 
-static void ffts_execute_nd(ffts_plan_t *p, const void *in, void *out)
+static void
+ffts_execute_nd(ffts_plan_t *p, const void *in, void *out)
 {
     uint64_t *din = (uint64_t*) in;
     uint64_t *buf = p->buf;
@@ -268,7 +205,7 @@ static void ffts_execute_nd(ffts_plan_t *p, const void *in, void *out)
         plan->transform(plan, din + (j * p->Ms[0]), buf + (j * p->Ms[0]));
     }
 
-    ffts_transpose(buf, dout, p->Ms[0], p->Ns[0], p->transpose_buf);
+    ffts_transpose(buf, dout, p->Ms[0], p->Ns[0]);
 
     for (i = 1; i < p->rank; i++) {
         plan = p->plans[i];
@@ -277,7 +214,7 @@ static void ffts_execute_nd(ffts_plan_t *p, const void *in, void *out)
             plan->transform(plan, dout + (j * p->Ms[i]), buf + (j * p->Ms[i]));
         }
 
-        ffts_transpose(buf, dout, p->Ms[i], p->Ns[i], p->transpose_buf);
+        ffts_transpose(buf, dout, p->Ms[i], p->Ns[i]);
     }
 }
 
@@ -315,11 +252,6 @@ ffts_init_nd(int rank, size_t *Ns, int sign)
 
     p->buf = ffts_aligned_malloc(2 * vol * sizeof(float));
     if (!p->buf) {
-        goto cleanup;
-    }
-
-    p->transpose_buf = ffts_aligned_malloc(2 * 8 * 8 * sizeof(float));
-    if (!p->transpose_buf) {
         goto cleanup;
     }
 
