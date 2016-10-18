@@ -40,9 +40,6 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include <xmmintrin.h>
 
-#define FFTS_MALLOC(d,a) (_mm_malloc(d,a))
-#define FFTS_FREE(d) (_mm_free(d))
-
 typedef __m128 V4SF;
 
 #define V4SF_ADD  _mm_add_ps
@@ -56,8 +53,9 @@ typedef __m128 V4SF;
 #define V4SF_SWAP_PAIRS(x) \
     (_mm_shuffle_ps(x, x, _MM_SHUFFLE(2,3,0,1)))
 
+/* note: order is swapped */
 #define V4SF_UNPACK_HI(x,y) \
-    (_mm_shuffle_ps(x, y, _MM_SHUFFLE(3,2,3,2)))
+    (_mm_movehl_ps(y, x))
 
 #define V4SF_UNPACK_LO(x,y) \
     (_mm_movelh_ps(x, y))
