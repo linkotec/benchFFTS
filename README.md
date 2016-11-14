@@ -1,3 +1,5 @@
+[![Build Status](https://travis-ci.org/linkotec/bench_ffts.svg?branch=master)](https://travis-ci.org/linkotec/bench_ffts)
+
 This directory contains a benchmarking and testing program for FFTS.
 This is a fork of test program used by FFTW.
 
