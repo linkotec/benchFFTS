@@ -7,7 +7,7 @@ set(FFTS_MAJOR 0)
 set(FFTS_MINOR 9)
 set(FFTS_MICRO 0)
 
-set(FFTS_VERSION "ffts-${FFTS_MAJOR}.${FFTS_MINOR}.${FFTS_MICRO}")
+set(FFTS_VERSION "${FFTS_MAJOR}.${FFTS_MINOR}.${FFTS_MICRO}")
 
 set(CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/cmake)
 set_property(GLOBAL PROPERTY USE_FOLDERS ON)
@@ -412,6 +412,8 @@ set(FFTS_HEADERS
 set(FFTS_SOURCES
   src/ffts_attributes.h
   src/ffts.c
+  src/ffts_chirp_z.c
+  src/ffts_chirp_z.h
   src/ffts_internal.h
   src/ffts_nd.c
   src/ffts_nd.h
