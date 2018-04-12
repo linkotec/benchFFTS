@@ -763,8 +763,25 @@ ffts_generate_cosine_sine_pow2_32f(ffts_cpx_32f *const table, int table_size)
         goto mid_point;
     }
 
+    /* generate small tables from lookup table */
+    if (table_size <= 128) {
+        const int step = 128 / table_size;
+
+        for (i = 1; i < table_size/2; i++) {
+            float cosine = (float) cos_sin_table[4 * i * step + 0].d;
+            float sine   = (float) cos_sin_table[4 * i * step + 2].d;
+
+            table[i          + 0][0] = cosine;
+            table[i          + 0][1] = -sine;
+            table[table_size - i][0] = sine;
+            table[table_size - i][1] = -cosine;
+        }
+
+        goto mid_point;
+    }
+
     /* calculate table offset */
-    FFTS_ASSUME(table_size/2 > 1);
+    FFTS_ASSUME(table_size/2 > 64);
     log_2 = ffts_ctzl(table_size);
     FFTS_ASSUME(log_2 > 1);
     offset = 32 - log_2;
@@ -834,8 +851,25 @@ ffts_generate_cosine_sine_pow2_64f(ffts_cpx_64f *const table, int table_size)
         goto mid_point;
     }
 
+    /* generate small tables from lookup table */
+    if (table_size <= 128) {
+        const int step = 128 / table_size;
+
+        for (i = 1; i < table_size/2; i++) {
+            double cosine = cos_sin_table[4 * i * step + 0].d;
+            double sine   = cos_sin_table[4 * i * step + 2].d;
+
+            table[i          + 0][0] = cosine;
+            table[i          + 0][1] = -sine;
+            table[table_size - i][0] = sine;
+            table[table_size - i][1] = -cosine;
+        }
+
+        goto mid_point;
+    }
+
     /* calculate table offset */
-    FFTS_ASSUME(table_size/2 > 1);
+    FFTS_ASSUME(table_size/2 > 64);
     log_2 = ffts_ctzl(table_size);
     FFTS_ASSUME(log_2 > 1);
     offset = 32 - log_2;
@@ -904,8 +938,25 @@ ffts_generate_cosine_sine_pow2_32f(ffts_cpx_32f *const table, int table_size)
         goto mid_point;
     }
 
+    /* generate small tables from lookup table */
+    if (table_size <= 128) {
+        const int step = 128 / table_size;
+
+        for (i = 1; i < table_size/2; i++) {
+            float cosine = (float) cos_sin_table[4 * i * step + 0].d;
+            float sine   = (float) cos_sin_table[4 * i * step + 2].d;
+
+            table[i          + 0][0] = cosine;
+            table[i          + 0][1] = -sine;
+            table[table_size - i][0] = sine;
+            table[table_size - i][1] = -cosine;
+        }
+
+        goto mid_point;
+    }
+
     /* calculate table offset */
-    FFTS_ASSUME(table_size/2 > 1);
+    FFTS_ASSUME(table_size/2 > 64);
     log_2 = ffts_ctzl(table_size);
     FFTS_ASSUME(log_2 > 1);
     offset = 32 - log_2;
@@ -970,8 +1021,25 @@ ffts_generate_cosine_sine_pow2_64f(ffts_cpx_64f *const table, int table_size)
         goto mid_point;
     }
 
+    /* generate small tables from lookup table */
+    if (table_size <= 128) {
+        const int step = 128 / table_size;
+
+        for (i = 1; i < table_size/2; i++) {
+            double cosine = cos_sin_table[4 * i * step + 0].d;
+            double sine   = cos_sin_table[4 * i * step + 2].d;
+
+            table[i          + 0][0] = cosine;
+            table[i          + 0][1] = -sine;
+            table[table_size - i][0] = sine;
+            table[table_size - i][1] = -cosine;
+        }
+
+        goto mid_point;
+    }
+
     /* calculate table offset */
-    FFTS_ASSUME(table_size/2 > 1);
+    FFTS_ASSUME(table_size/2 > 64);
     log_2 = ffts_ctzl(table_size);
     FFTS_ASSUME(log_2 > 1);
     offset = 32 - log_2;
