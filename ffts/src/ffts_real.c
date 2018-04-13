@@ -4,7 +4,7 @@ This file is part of FFTS -- The Fastest Fourier Transform in the South
 
 Copyright (c) 2012, Anthony M. Blake <amb@anthonix.com>
 Copyright (c) 2012, The University of Waikato
-Copyright (c) 2015, Jukka Ojanen <jukka.ojanen@kolumbus.fi>
+Copyright (c) 2015 - 2018, Jukka Ojanen <jukka.ojanen@kolumbus.fi>
 
 All rights reserved.
 
@@ -33,6 +33,7 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 
 #include "ffts_real.h"
+#include "ffts_cpu.h"
 #include "ffts_internal.h"
 #include "ffts_trig.h"
 
@@ -46,7 +47,8 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include <pmmintrin.h>
 #elif HAVE_INTRIN_H
 #include <intrin.h>
-#else
+#endif
+
 /* avoid using negative zero as some configurations have problems with those */
 static const FFTS_ALIGN(16) unsigned int sign_mask_even[4] = {
     0x80000000, 0, 0x80000000, 0
@@ -54,7 +56,6 @@ static const FFTS_ALIGN(16) unsigned int sign_mask_even[4] = {
 static const FFTS_ALIGN(16) unsigned int sign_mask_odd[4] = {
     0, 0x80000000, 0, 0x80000000
 };
-#endif
 #endif
 
 static void
@@ -79,8 +80,9 @@ ffts_free_1d_real(ffts_plan_t *p)
     free(p);
 }
 
+#ifdef __ARM_NEON__
 static void
-ffts_execute_1d_real(ffts_plan_t *p, const void *input, void *output)
+ffts_execute_1d_real_neon(ffts_plan_t *p, const void *input, void *output)
 {
     float *const FFTS_RESTRICT out =
         (float *const FFTS_RESTRICT) FFTS_ASSUME_ALIGNED_16(output);
@@ -91,25 +93,19 @@ ffts_execute_1d_real(ffts_plan_t *p, const void *input, void *output)
     const float *const FFTS_RESTRICT B =
         (const float *const FFTS_RESTRICT) FFTS_ASSUME_ALIGNED_32(p->B);
     const int N = (const int) p->N;
-    int i;
-
-#ifdef __ARM_NEON__
     float *p_buf0 = buf;
     float *p_buf1 = buf + N - 2;
     float *p_out = out;
-#endif
+    int i;
 
     /* we know this */
     FFTS_ASSUME(N/2 > 0);
 
     p->plans[0]->transform(p->plans[0], input, buf);
 
-#ifndef HAVE_SSE
     buf[N + 0] = buf[0];
     buf[N + 1] = buf[1];
-#endif
 
-#ifdef __ARM_NEON__
     for (i = 0; i < N; i += 4) {
         __asm__ __volatile__ (
             "vld1.32 {q8},  [%[pa]]!\n\t"
@@ -151,7 +147,35 @@ ffts_execute_1d_real(ffts_plan_t *p, const void *input, void *output)
             : "memory", "q8", "q9", "q10", "q11", "q12", "q13", "q14", "q15"
         );
     }
-#elif HAVE_SSE3
+
+    out[N + 0] = buf[0] - buf[1];
+    out[N + 1] = 0.0f;
+}
+#endif
+
+#if HAVE_SSE3
+static void
+ffts_execute_1d_real_sse3(ffts_plan_t *p, const void *input, void *output)
+{
+    float *const FFTS_RESTRICT out =
+        (float *const FFTS_RESTRICT) FFTS_ASSUME_ALIGNED_16(output);
+    float *const FFTS_RESTRICT buf =
+        (float *const FFTS_RESTRICT) FFTS_ASSUME_ALIGNED_32(p->buf);
+    const float *const FFTS_RESTRICT A =
+        (const float *const FFTS_RESTRICT) FFTS_ASSUME_ALIGNED_32(p->A);
+    const float *const FFTS_RESTRICT B =
+        (const float *const FFTS_RESTRICT) FFTS_ASSUME_ALIGNED_32(p->B);
+    const int N = (const int) p->N;
+    int i;
+
+    /* we know this */
+    FFTS_ASSUME(N/2 > 0);
+
+    p->plans[0]->transform(p->plans[0], input, buf);
+
+    buf[N + 0] = buf[0];
+    buf[N + 1] = buf[1];
+
     if (FFTS_UNLIKELY(N <= 8)) {
         __m128 t0 = _mm_load_ps(buf);
         __m128 t1 = _mm_load_ps(buf + N - 4);
@@ -235,7 +259,32 @@ ffts_execute_1d_real(ffts_plan_t *p, const void *input, void *output)
                 _mm_mul_ps(_mm_shuffle_ps(t2, t0, _MM_SHUFFLE(2,2,0,0)), t4))));
         }
     }
-#elif HAVE_SSE
+
+    out[N + 0] = buf[0] - buf[1];
+    out[N + 1] = 0.0f;
+}
+#endif
+
+#ifdef HAVE_SSE
+static void
+ffts_execute_1d_real_sse(ffts_plan_t *p, const void *input, void *output)
+{
+    float *const FFTS_RESTRICT out =
+        (float *const FFTS_RESTRICT) FFTS_ASSUME_ALIGNED_16(output);
+    float *const FFTS_RESTRICT buf =
+        (float *const FFTS_RESTRICT) FFTS_ASSUME_ALIGNED_32(p->buf);
+    const float *const FFTS_RESTRICT A =
+        (const float *const FFTS_RESTRICT) FFTS_ASSUME_ALIGNED_32(p->A);
+    const float *const FFTS_RESTRICT B =
+        (const float *const FFTS_RESTRICT) FFTS_ASSUME_ALIGNED_32(p->B);
+    const int N = (const int) p->N;
+    int i;
+
+    /* we know this */
+    FFTS_ASSUME(N/2 > 0);
+
+    p->plans[0]->transform(p->plans[0], input, buf);
+
     if (FFTS_UNLIKELY(N <= 8)) {
         __m128 c0 = _mm_load_ps((const float*) sign_mask_even);
         __m128 t0 = _mm_load_ps(buf);
@@ -327,7 +376,34 @@ ffts_execute_1d_real(ffts_plan_t *p, const void *input, void *output)
                 _MM_SHUFFLE(2,3,0,1)))));
         }
     }
-#else
+
+    out[N + 0] = buf[0] - buf[1];
+    out[N + 1] = 0.0f;
+}
+#endif
+
+static void
+ffts_execute_1d_real(ffts_plan_t *p, const void *input, void *output)
+{
+    float *const FFTS_RESTRICT out =
+        (float *const FFTS_RESTRICT) FFTS_ASSUME_ALIGNED_16(output);
+    float *const FFTS_RESTRICT buf =
+        (float *const FFTS_RESTRICT) FFTS_ASSUME_ALIGNED_32(p->buf);
+    const float *const FFTS_RESTRICT A =
+        (const float *const FFTS_RESTRICT) FFTS_ASSUME_ALIGNED_32(p->A);
+    const float *const FFTS_RESTRICT B =
+        (const float *const FFTS_RESTRICT) FFTS_ASSUME_ALIGNED_32(p->B);
+    const int N = (const int) p->N;
+    int i;
+
+    /* we know this */
+    FFTS_ASSUME(N/2 > 0);
+
+    p->plans[0]->transform(p->plans[0], input, buf);
+
+    buf[N + 0] = buf[0];
+    buf[N + 1] = buf[1];
+
     for (i = 0; i < N/2; i++) {
         out[2*i + 0] =
             buf[    2*i + 0] * A[2*i + 0] - buf[    2*i + 1] * A[2*i + 1] +
@@ -336,14 +412,14 @@ ffts_execute_1d_real(ffts_plan_t *p, const void *input, void *output)
             buf[    2*i + 1] * A[2*i + 0] + buf[    2*i + 0] * A[2*i + 1] +
             buf[N - 2*i + 0] * B[2*i + 1] - buf[N - 2*i + 1] * B[2*i + 0];
     }
-#endif
 
     out[N + 0] = buf[0] - buf[1];
     out[N + 1] = 0.0f;
 }
 
+#ifdef __ARM_NEON__
 static void
-ffts_execute_1d_real_inv(ffts_plan_t *p, const void *input, void *output)
+ffts_execute_1d_real_inv_neon(ffts_plan_t *p, const void *input, void *output)
 {
     float *const FFTS_RESTRICT in =
         (float *const FFTS_RESTRICT) FFTS_ASSUME_ALIGNED_16(input);
@@ -354,18 +430,14 @@ ffts_execute_1d_real_inv(ffts_plan_t *p, const void *input, void *output)
     const float *const FFTS_RESTRICT B =
         (const float *const FFTS_RESTRICT) FFTS_ASSUME_ALIGNED_32(p->B);
     const int N = (const int) p->N;
-    int i;
-
-#ifdef __ARM_NEON__
     float *p_buf0 = in;
     float *p_buf1 = in + N - 2;
     float *p_out = buf;
-#endif
+    int i;
 
     /* we know this */
     FFTS_ASSUME(N/2 > 0);
 
-#ifdef __ARM_NEON__
     for (i = 0; i < N/2; i += 2) {
         __asm__ __volatile__ (
             "vld1.32 {q8},  [%[pa]]!\n\t"
@@ -407,7 +479,29 @@ ffts_execute_1d_real_inv(ffts_plan_t *p, const void *input, void *output)
             : "memory", "q8", "q9", "q10", "q11", "q12", "q13", "q14", "q15"
         );
     }
-#elif HAVE_SSE3
+
+    p->plans[0]->transform(p->plans[0], buf, output);
+}
+#endif
+
+#if HAVE_SSE3
+static void
+ffts_execute_1d_real_inv_sse3(ffts_plan_t *p, const void *input, void *output)
+{
+    float *const FFTS_RESTRICT in =
+        (float *const FFTS_RESTRICT) FFTS_ASSUME_ALIGNED_16(input);
+    float *const FFTS_RESTRICT buf =
+        (float *const FFTS_RESTRICT) FFTS_ASSUME_ALIGNED_32(p->buf);
+    const float *const FFTS_RESTRICT A =
+        (const float *const FFTS_RESTRICT) FFTS_ASSUME_ALIGNED_32(p->A);
+    const float *const FFTS_RESTRICT B =
+        (const float *const FFTS_RESTRICT) FFTS_ASSUME_ALIGNED_32(p->B);
+    const int N = (const int) p->N;
+    int i;
+
+    /* we know this */
+    FFTS_ASSUME(N/2 > 0);
+
     if (FFTS_UNLIKELY(N <= 8)) {
         __m128 t0 = _mm_loadl_pi(_mm_setzero_ps(), (const __m64*) &in[N]);
         __m128 t1 = _mm_load_ps(in);
@@ -492,7 +586,29 @@ ffts_execute_1d_real_inv(ffts_plan_t *p, const void *input, void *output)
                 _mm_mul_ps(_mm_shuffle_ps(t2, t0, _MM_SHUFFLE(2,2,0,0)), t4))));
         }
     }
-#elif HAVE_SSE
+
+    p->plans[0]->transform(p->plans[0], buf, output);
+}
+#endif
+
+#if HAVE_SSE
+static void
+ffts_execute_1d_real_inv_sse(ffts_plan_t *p, const void *input, void *output)
+{
+    float *const FFTS_RESTRICT in =
+        (float *const FFTS_RESTRICT) FFTS_ASSUME_ALIGNED_16(input);
+    float *const FFTS_RESTRICT buf =
+        (float *const FFTS_RESTRICT) FFTS_ASSUME_ALIGNED_32(p->buf);
+    const float *const FFTS_RESTRICT A =
+        (const float *const FFTS_RESTRICT) FFTS_ASSUME_ALIGNED_32(p->A);
+    const float *const FFTS_RESTRICT B =
+        (const float *const FFTS_RESTRICT) FFTS_ASSUME_ALIGNED_32(p->B);
+    const int N = (const int) p->N;
+    int i;
+
+    /* we know this */
+    FFTS_ASSUME(N/2 > 0);
+
     if (FFTS_UNLIKELY(N <= 8)) {
         __m128 c0 = _mm_load_ps((const float*) sign_mask_odd);
         __m128 t0 = _mm_loadl_pi(_mm_setzero_ps(), (const __m64*) &in[N]);
@@ -585,7 +701,28 @@ ffts_execute_1d_real_inv(ffts_plan_t *p, const void *input, void *output)
                 _mm_xor_ps(t4, c0))));
         }
     }
-#else
+
+    p->plans[0]->transform(p->plans[0], buf, output);
+}
+#endif
+
+static void
+ffts_execute_1d_real_inv(ffts_plan_t *p, const void *input, void *output)
+{
+    float *const FFTS_RESTRICT in =
+        (float *const FFTS_RESTRICT) FFTS_ASSUME_ALIGNED_16(input);
+    float *const FFTS_RESTRICT buf =
+        (float *const FFTS_RESTRICT) FFTS_ASSUME_ALIGNED_32(p->buf);
+    const float *const FFTS_RESTRICT A =
+        (const float *const FFTS_RESTRICT) FFTS_ASSUME_ALIGNED_32(p->A);
+    const float *const FFTS_RESTRICT B =
+        (const float *const FFTS_RESTRICT) FFTS_ASSUME_ALIGNED_32(p->B);
+    const int N = (const int) p->N;
+    int i;
+
+    /* we know this */
+    FFTS_ASSUME(N/2 > 0);
+
     for (i = 0; i < N/2; i++) {
         buf[2*i + 0] =
             in[    2*i + 0] * A[2*i + 0] + in[    2*i + 1] * A[2*i + 1] +
@@ -594,7 +731,6 @@ ffts_execute_1d_real_inv(ffts_plan_t *p, const void *input, void *output)
             in[    2*i + 1] * A[2*i + 0] - in[    2*i + 0] * A[2*i + 1] -
             in[N - 2*i + 0] * B[2*i + 1] - in[N - 2*i + 1] * B[2*i + 0];
     }
-#endif
 
     p->plans[0]->transform(p->plans[0], buf, output);
 }
@@ -602,18 +738,35 @@ ffts_execute_1d_real_inv(ffts_plan_t *p, const void *input, void *output)
 FFTS_API ffts_plan_t*
 ffts_init_1d_real(size_t N, int sign)
 {
+#ifndef __ARM_NEON__
+    int cpu_flags = ffts_cpu_detect(NULL);
+#endif
     ffts_plan_t *p;
+    int invert = 0;
 
     p = (ffts_plan_t*) calloc(1, sizeof(*p) + sizeof(*p->plans));
     if (!p) {
         return NULL;
     }
 
-    if (sign < 0) {
-        p->transform = &ffts_execute_1d_real;
-    } else {
-        p->transform = &ffts_execute_1d_real_inv;
+#ifdef __ARM_NEON__
+    p->transform = (sign < 0) ? &ffts_execute_1d_real_neon : &ffts_execute_1d_real_inv;
+#else
+#ifdef HAVE_SSE3
+    if (cpu_flags & FFTS_CPU_X86_SSE3) {
+        p->transform = (sign < 0) ? &ffts_execute_1d_real_sse3 : &ffts_execute_1d_real_inv_sse3;
+        invert = 1;
+    } else
+#endif
+#ifdef HAVE_SSE
+    if (cpu_flags & FFTS_CPU_X86_SSE) {
+        p->transform = (sign < 0) ? &ffts_execute_1d_real_sse : &ffts_execute_1d_real_inv_sse;
+    } else
+#endif
+    {
+        p->transform = (sign < 0) ? &ffts_execute_1d_real : &ffts_execute_1d_real_inv;
     }
+#endif
 
     p->destroy = &ffts_free_1d_real;
     p->N       = N;
@@ -640,12 +793,7 @@ ffts_init_1d_real(size_t N, int sign)
         goto cleanup;
     }
 
-#ifdef HAVE_SSE3
-    ffts_generate_table_1d_real_32f(p, sign, 1);
-#else
-    ffts_generate_table_1d_real_32f(p, sign, 0);
-#endif
-
+    ffts_generate_table_1d_real_32f(p, sign, invert);
     return p;
 
 cleanup:
